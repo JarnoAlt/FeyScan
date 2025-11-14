@@ -16,22 +16,18 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const CONTRACT_ADDRESS = '0x8EEF0dC80ADf57908bB1be0236c2a72a7e379C2d';
-// Multi-provider setup for parallel operations
+// Alchemy-only setup (paid plan) - using single provider for all operations
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
-const INFURA_API_KEY = process.env.INFURA_API_KEY;
+const INFURA_API_KEY = process.env.INFURA_API_KEY; // Kept for reference but not used
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
 
-// Primary provider (for main monitoring)
+// Primary provider (Alchemy only - paid plan)
 const BASE_RPC = ALCHEMY_API_KEY
   ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
-  : INFURA_API_KEY
-  ? `https://base-mainnet.infura.io/v3/${INFURA_API_KEY}`
   : 'https://mainnet.base.org';
 
-// Secondary provider (for parallel volume checks)
-const BASE_RPC_SECONDARY = INFURA_API_KEY
-  ? `https://base-mainnet.infura.io/v3/${INFURA_API_KEY}`
-  : ALCHEMY_API_KEY
+// Secondary provider (also Alchemy for load balancing)
+const BASE_RPC_SECONDARY = ALCHEMY_API_KEY
   ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
   : 'https://mainnet.base.org';
 
@@ -54,7 +50,7 @@ const KNOWN_TOKEN_NAMES = new Set([
 ]);
 
 let provider;
-let providerSecondary; // For parallel operations
+let providerSecondary; // Same as provider (Alchemy), kept for potential future load balancing
 let lastCheckedBlock = null;
 let isMonitoring = false;
 
@@ -66,14 +62,7 @@ export async function startMonitoring() {
     provider = new ethers.JsonRpcProvider(BASE_RPC);
     providerSecondary = new ethers.JsonRpcProvider(BASE_RPC_SECONDARY);
 
-    let rpcType = 'Public RPC';
-    if (ALCHEMY_API_KEY && INFURA_API_KEY) {
-      rpcType = 'Alchemy (primary) + Infura (secondary)';
-    } else if (ALCHEMY_API_KEY) {
-      rpcType = 'Alchemy API';
-    } else if (INFURA_API_KEY) {
-      rpcType = 'Infura API';
-    }
+    let rpcType = ALCHEMY_API_KEY ? 'Alchemy API (paid plan)' : 'Public RPC';
     console.log(`Connected to Base Network via ${rpcType}`);
 
     // Get current block
@@ -244,7 +233,7 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
     const RECENT_BLOCK_RANGE = 100;
     const MAX_BLOCK_RANGE = 2000; // Paid plan allows up to 10k blocks
     let foundCount = 0;
-    
+
     // PRIORITY: Check most recent blocks first for immediate detection
     const recentFromBlock = Math.max(fromBlock, toBlock - RECENT_BLOCK_RANGE);
     if (recentFromBlock <= toBlock) {
@@ -255,24 +244,24 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
           toBlock: toBlock,
           topics: [tokenCreatedTopic]
         });
-        
+
         console.log(`  🔍 PRIORITY: Checking recent blocks ${recentFromBlock}-${toBlock}: found ${recentLogs.length} TokenCreated events`);
-        
+
         for (const log of recentLogs) {
           try {
             if (log.topics && log.topics.length >= 4) {
               const tokenAddress = '0x' + log.topics[2].slice(-40);
-              
+
               // Get transaction and receipt for additional data
               const tx = await provider.getTransaction(log.transactionHash);
               const receipt = await provider.getTransactionReceipt(log.transactionHash);
-              
+
               // Check if we already have this deployment
               const existing = await getAllDeployments();
               if (existing.some(d => d.txHash === log.transactionHash || d.tokenAddress?.toLowerCase() === tokenAddress.toLowerCase())) {
                 continue; // Already processed
               }
-              
+
               // Extract and store immediately
               await extractAndStoreDeployment(tx, receipt, tokenAddress);
               foundCount++;
@@ -286,7 +275,7 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
         console.error(`  ⚠️  Error checking recent TokenCreated events:`, e.message);
       }
     }
-    
+
     // Then check older blocks if needed (for backfilling)
     if (fromBlock < recentFromBlock && toBlock - fromBlock <= MAX_BLOCK_RANGE) {
       try {
@@ -296,9 +285,9 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
           toBlock: toBlock,
           topics: [tokenCreatedTopic] // Filter by event signature
         });
-        
+
         console.log(`  🔍 Checking TokenCreated events in blocks ${fromBlock}-${toBlock}: found ${logs.length} events`);
-        
+
         for (const log of logs) {
           try {
             // Decode the event (indexed params are in topics, non-indexed in data)
@@ -345,7 +334,7 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
       // For larger ranges, chunk it
       for (let blockNum = fromBlock; blockNum <= toBlock; blockNum += MAX_BLOCK_RANGE) {
         const endBlock = Math.min(blockNum + MAX_BLOCK_RANGE - 1, toBlock);
-        
+
         try {
           const logs = await provider.getLogs({
             address: CONTRACT_ADDRESS,
@@ -353,33 +342,33 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
             toBlock: endBlock,
             topics: [tokenCreatedTopic] // Filter by event signature
           });
-          
+
           console.log(`  🔍 Checking TokenCreated events in blocks ${blockNum}-${endBlock}: found ${logs.length} events`);
-          
+
           for (const log of logs) {
             try {
               // Decode the event (indexed params are in topics, non-indexed in data)
               // topics[0] = event signature
               // topics[1] = msgSender (indexed)
-              // topics[2] = tokenAddress (indexed) 
+              // topics[2] = tokenAddress (indexed)
               // topics[3] = tokenAdmin (indexed)
               // data contains: tokenMetadata, tokenImage, tokenName, tokenSymbol, tokenContext, poolHook, poolId, startingTick, pairedToken, locker, mevModule, extensionsSupply, extensions[]
-              
+
               if (log.topics && log.topics.length >= 4) {
                 const msgSender = '0x' + log.topics[1].slice(-40);
                 const tokenAddress = '0x' + log.topics[2].slice(-40);
                 const tokenAdmin = '0x' + log.topics[3].slice(-40);
-                
+
                 // Get transaction and receipt for additional data
                 const tx = await provider.getTransaction(log.transactionHash);
                 const receipt = await provider.getTransactionReceipt(log.transactionHash);
-                
+
                 // Check if we already have this deployment
                 const existing = await getAllDeployments();
                 if (existing.some(d => d.txHash === log.transactionHash || d.tokenAddress?.toLowerCase() === tokenAddress.toLowerCase())) {
                   continue; // Already processed
                 }
-                
+
                 // Decode the event data to get token name, symbol, etc.
                 // For now, extract from transaction receipt logs (ERC20 Transfer from address(0))
                 // This is more reliable than parsing the event data directly
@@ -391,10 +380,10 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
               console.error(`  ⚠️  Error processing TokenCreated event:`, e.message);
             }
           }
-          
-          // Small delay to avoid rate limits
+
+          // Small delay to avoid rate limits (frugal for paid plan)
           if (blockNum < toBlock) {
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise(resolve => setTimeout(resolve, 150));
           }
         } catch (e) {
           if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('exceeded'))) {
@@ -454,7 +443,7 @@ async function getTransactionsInRange(fromBlock, toBlock) {
           console.log(`    Processed ${processedChunks}/${totalChunks} chunks, found ${txHashes.size} unique transactions...`);
         }
 
-        // Small delay to avoid rate limits
+        // Small delay to avoid rate limits (frugal for paid plan)
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         console.error(`    Error fetching logs for blocks ${blockNum}-${endBlock}:`, error.message);
@@ -476,7 +465,7 @@ async function getTransactionsInRange(fromBlock, toBlock) {
         if (fetched % 50 === 0) {
           console.log(`    Fetched ${fetched}/${txHashes.size} transaction details...`);
         }
-        // Small delay every 20 fetches
+        // Small delay every 20 fetches (frugal for paid plan)
         if (fetched % 20 === 0) {
           await new Promise(resolve => setTimeout(resolve, 50));
         }
@@ -955,8 +944,8 @@ async function updateHolderCounts() {
           volumeHistory: newVolumeHistory
         });
 
-        // Small delay between updates to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Small delay between updates to avoid rate limits (frugal for paid plan)
+        await new Promise(resolve => setTimeout(resolve, 150));
       } catch (err) {
         console.error(`Error updating volume for ${deployment.tokenName || 'token'}:`, err.message);
         // Continue with next token
@@ -977,9 +966,9 @@ async function updateHolderCounts() {
     // Process holder count updates sequentially to avoid rate limits
     // Process one token at a time with delays between them
     for (const deployment of toUpdate) {
-      // Add delay between tokens (reduced with paid plan)
+      // Add delay between tokens (frugal but reasonable for paid plan)
       if (toUpdate.indexOf(deployment) > 0) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay between tokens
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay between tokens
       }
 
       await (async () => {
@@ -1002,10 +991,8 @@ async function updateHolderCounts() {
           }
 
           // Count from Transfer events (more accurate for all holders)
-          // Alternate between providers for load balancing
-          const tokenIndex = toUpdate.indexOf(deployment);
-          const useSecondary = tokenIndex % 2 === 1;
-          const activeProvider = useSecondary ? providerSecondary : provider;
+          // Use primary provider (Alchemy paid plan)
+          const activeProvider = provider;
 
           const transferEventSignature = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
           const holders = new Set();
@@ -1028,11 +1015,11 @@ async function updateHolderCounts() {
             // For now, just check recent blocks and estimate
           }
 
-          // Respect RPC limits: Alchemy free tier allows max 10 blocks, use smaller chunks
-          const maxBlockRange = 8; // Use 8 blocks to stay under Alchemy's 10-block limit
+          // Paid Alchemy plan allows larger block ranges, but be frugal
+          const maxBlockRange = 100; // Paid plan allows much larger ranges, but keep reasonable
 
-          // Limit total chunks to avoid rate limits (max 10 chunks = 80 blocks per token)
-          const maxChunks = Math.min(10, Math.ceil((toBlock - checkFromBlock) / maxBlockRange));
+          // Limit total chunks to avoid rate limits (max 20 chunks = 2000 blocks per token)
+          const maxChunks = Math.min(20, Math.ceil((toBlock - checkFromBlock) / maxBlockRange));
           let chunkFrom = checkFromBlock;
           let chunkCount = 0;
           let rateLimitHit = false;
@@ -1064,13 +1051,13 @@ async function updateHolderCounts() {
 
               consecutiveErrors = 0; // Reset error counter on success
 
-              // Delays between chunks (reduced with paid plan)
+              // Delays between chunks (frugal but reasonable for paid plan)
               if (chunkCount > 0) {
                 // Small delay between chunks
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 300));
               } else {
                 // Small delay before first chunk
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 200));
               }
             } catch (e) {
               consecutiveErrors++;
@@ -1079,8 +1066,8 @@ async function updateHolderCounts() {
               if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('exceeded') || e.message.includes('block range'))) {
                 rateLimitHit = true;
                 console.error(`  ⚠️  Rate limit hit for ${deployment.tokenName || 'token'}, stopping holder check`);
-                // Wait 5 seconds before continuing to next token (reduced with paid plan)
-                await new Promise(resolve => setTimeout(resolve, 5000));
+                // Wait 3 seconds before continuing to next token (paid plan allows faster recovery)
+                await new Promise(resolve => setTimeout(resolve, 3000));
                 break;
               }
               console.error(`  ⚠️  Error fetching logs for blocks ${chunkFrom}-${chunkTo}:`, e.message);

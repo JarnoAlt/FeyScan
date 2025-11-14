@@ -6,7 +6,7 @@
 -- ============================================
 
 -- Add volume tracking columns
-ALTER TABLE deployments 
+ALTER TABLE deployments
 ADD COLUMN IF NOT EXISTS volume_24h NUMERIC DEFAULT 0,
 ADD COLUMN IF NOT EXISTS volume_7d NUMERIC DEFAULT 0,
 ADD COLUMN IF NOT EXISTS volume_history JSONB DEFAULT '[]'::jsonb;
