@@ -127,6 +127,10 @@ export async function getAllDeployments() {
 
     if (error) {
       console.error('Error getting deployments from Supabase:', error);
+      if (error.message && error.message.includes('Invalid API key')) {
+        console.error('⚠️  Supabase API key is invalid. Please check your SUPABASE_ANON_KEY in .env');
+        console.error('   Falling back to JSON file storage');
+      }
       return getJSONDeployments();
     }
 
