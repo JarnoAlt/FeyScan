@@ -33,6 +33,19 @@ const BASE_RPC_SECONDARY = ALCHEMY_API_KEY
 
 const POLL_INTERVAL = 15000; // 15 seconds
 const ETHERSCAN_API_URL = 'https://api.basescan.org/api';
+const ALCHEMY_TRACE_URL = ALCHEMY_API_KEY
+  ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
+  : null;
+
+// Known DEX router addresses on Base (for identifying swaps)
+const DEX_ROUTERS = new Set([
+  '0x2626664c2603336E57B271c5C0b26F421741e481'.toLowerCase(), // Uniswap V3 Router
+  '0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24'.toLowerCase(), // Uniswap V3 Router 2
+  '0x03a520b32C04BF3bEEf7Bebf72F091C1C93A44fE'.toLowerCase(), // Aerodrome Router
+  '0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E45'.toLowerCase(), // Aerodrome Router V2
+  '0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891'.toLowerCase(), // BaseSwap Router
+  '0x327Df1E6de05895d2ab08513aaDD9313Fe505d86'.toLowerCase(), // SwapBased Router
+]);
 
 // Known standard tokens to exclude (not new deployments)
 const KNOWN_TOKENS = new Set([
@@ -499,10 +512,26 @@ async function processTransaction(tx) {
       return false; // Transaction failed or not found
     }
 
-    // Check if this is already stored
+    // Check if this is already stored (by txHash or tokenAddress)
     const existing = await getAllDeployments();
     if (existing.some(d => d.txHash === tx.hash)) {
       return false; // Already processed
+    }
+
+    // Also check for duplicate token addresses (extract token address from receipt)
+    if (receipt && receipt.logs) {
+      const transferEventSignature = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+      const deployerAddr = CONTRACT_ADDRESS.toLowerCase();
+
+      for (const log of receipt.logs) {
+        const logAddress = log.address.toLowerCase();
+        if (logAddress !== deployerAddr && !KNOWN_TOKENS.has(logAddress)) {
+          // Check if this token address already exists
+          if (existing.some(d => d.tokenAddress && d.tokenAddress.toLowerCase() === logAddress)) {
+            return false; // Token address already exists
+          }
+        }
+      }
     }
 
     // Decode the function call
@@ -561,6 +590,12 @@ async function checkIfDeployToken(tx, receipt, functionSelector) {
  */
 async function extractAndStoreDeployment(tx, receipt, knownTokenAddress = null) {
   try {
+    // Final duplicate check before storing
+    const existing = await getAllDeployments();
+    if (existing.some(d => d.txHash === tx.hash)) {
+      return; // Already processed
+    }
+
     const block = await provider.getBlock(receipt.blockNumber);
     const timestamp = block ? block.timestamp : Math.floor(Date.now() / 1000);
 
@@ -744,6 +779,17 @@ async function extractAndStoreDeployment(tx, receipt, knownTokenAddress = null) 
       }
     }
 
+    // Final check: if we have a token address, verify it's not a duplicate
+    if (tokenAddress && tokenAddress !== 'N/A') {
+      const existingByAddress = existing.find(d =>
+        d.tokenAddress && d.tokenAddress.toLowerCase() === tokenAddress.toLowerCase()
+      );
+      if (existingByAddress) {
+        console.log(`  ⚠️  Duplicate token address detected: ${tokenAddress} (already exists as ${existingByAddress.txHash})`);
+        return; // Token address already exists, skip
+      }
+    }
+
     // Create deployment object
     const deployment = {
       txHash: tx.hash,
@@ -783,6 +829,140 @@ async function extractAndStoreDeployment(tx, receipt, knownTokenAddress = null) 
     }
   } catch (error) {
     console.error('Error extracting deployment:', error);
+  }
+}
+
+/**
+ * Calculate actual ETH volume using Alchemy Trace API
+ * This provides accurate volume metrics instead of estimates
+ */
+async function calculateActualVolume(deployment, currentBlock, currentTimestamp) {
+  if (!ALCHEMY_TRACE_URL || !deployment.tokenAddress) {
+    // Fallback to estimate if Trace API not available
+    return { volume24h: 0, volume7d: 0 };
+  }
+
+  try {
+    const tokenAddress = deployment.tokenAddress.toLowerCase();
+    const WETH_ADDRESS = '0x4200000000000000000000000000000000000006'.toLowerCase();
+
+    // Calculate block ranges for 24h and 7d (Base has ~2s block time, ~43200 blocks/day)
+    const blocks24h = 43200;
+    const blocks7d = blocks24h * 7;
+    const fromBlock24h = Math.max(currentBlock - blocks24h, deployment.blockNumber);
+    const fromBlock7d = Math.max(currentBlock - blocks7d, deployment.blockNumber);
+
+    let volume24h = 0;
+    let volume7d = 0;
+
+    // Get all transactions involving this token in the last 24h
+    try {
+      // Find transactions that interact with DEX routers and involve our token
+      const transferEventSignature = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+
+      // Get Transfer events for the token
+      const transferLogs = await provider.getLogs({
+        address: deployment.tokenAddress,
+        fromBlock: fromBlock24h,
+        toBlock: currentBlock,
+        topics: [transferEventSignature]
+      });
+
+      // Get unique transaction hashes
+      const txHashes = [...new Set(transferLogs.map(log => log.transactionHash))];
+
+      // Limit to most recent 50 transactions to avoid rate limits
+      const recentTxs = txHashes.slice(-50);
+
+      // Process transactions in batches to get traces
+      for (const txHash of recentTxs) {
+        try {
+          const tx = await provider.getTransaction(txHash);
+          if (!tx || !tx.to) continue;
+
+          // Check if transaction interacts with a DEX router
+          const toAddress = tx.to.toLowerCase();
+          if (!DEX_ROUTERS.has(toAddress)) continue;
+
+          // Get transaction trace using Alchemy Trace API
+          const traceResponse = await fetch(ALCHEMY_TRACE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'trace_transaction',
+              params: [txHash]
+            })
+          });
+
+          if (!traceResponse.ok) continue;
+          const traceData = await traceResponse.json();
+
+          if (traceData.result && Array.isArray(traceData.result)) {
+            // Extract ETH value transfers from trace
+            for (const trace of traceData.result) {
+              if (trace.action && trace.action.value) {
+                const value = BigInt(trace.action.value);
+                if (value > 0) {
+                  const ethValue = parseFloat(ethers.formatEther(value));
+
+                  // Check if this trace involves our token or WETH
+                  const traceAddress = trace.action.to?.toLowerCase();
+                  if (traceAddress === tokenAddress || traceAddress === WETH_ADDRESS) {
+                    // Get block number for this transaction
+                    const receipt = await provider.getTransactionReceipt(txHash);
+                    if (receipt) {
+                      const block = await provider.getBlock(receipt.blockNumber);
+                      const txTimestamp = block ? block.timestamp : currentTimestamp;
+                      const age = currentTimestamp - txTimestamp;
+
+                      if (age <= 86400) { // 24 hours
+                        volume24h += ethValue;
+                      }
+                      if (age <= 604800) { // 7 days
+                        volume7d += ethValue;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Small delay to avoid rate limits
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (err) {
+          // Continue with next transaction if trace fails
+          continue;
+        }
+      }
+    } catch (err) {
+      console.error(`Error calculating volume for ${deployment.tokenName || 'token'}:`, err.message);
+      // Return fallback estimate - will be calculated in fallback section below
+    }
+
+    // If we got actual volume, use it; otherwise use fallback
+    if (volume24h === 0 && volume7d === 0) {
+      // Fallback: estimate based on transfer activity
+      const transferLogs = await provider.getLogs({
+        address: deployment.tokenAddress,
+        fromBlock: fromBlock24h,
+        toBlock: currentBlock,
+        topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef']
+      });
+      const transferCount = transferLogs.length;
+      return {
+        volume24h: transferCount * 0.01,
+        volume7d: transferCount * 0.01 * 7
+      };
+    }
+
+    return { volume24h, volume7d };
+  } catch (error) {
+    console.error(`Error in calculateActualVolume:`, error.message);
+    // Return zero volume on error
+    return { volume24h: 0, volume7d: 0 };
   }
 }
 
@@ -890,12 +1070,27 @@ async function updateHolderCounts() {
         }
       }
 
-      // Priority 4: Tokens not checked recently (stale data)
+      // Priority 4: Tokens not checked recently (stale data) - HEAVILY penalize recently-checked
       const lastCheck = deployment.lastHolderCheck || (history.length > 0 ? history[history.length - 1].timestamp : deployment.timestamp);
       const timeSinceCheck = currentTimestamp - lastCheck;
-      if (timeSinceCheck > 600) priority += 400; // Not checked in 10+ min
-      else if (timeSinceCheck > 300) priority += 200; // Not checked in 5+ min
-      else if (timeSinceCheck > 120) priority += 100; // Not checked in 2+ min
+
+      // Cooldown period: Skip tokens checked very recently (unless brand new)
+      // Use existing 'age' variable from Priority 2
+      const isVeryNew = age < 3600; // Less than 1 hour old
+
+      if (timeSinceCheck < 120 && !isVeryNew) {
+        priority -= 5000; // Checked in last 2 min - skip unless extremely high priority or very new
+      } else if (timeSinceCheck < 300 && !isVeryNew) {
+        priority -= 2000; // Checked in last 5 min - heavy penalty
+      } else if (timeSinceCheck < 600) {
+        priority -= 500; // Checked in last 10 min - moderate penalty
+      } else if (timeSinceCheck > 600) {
+        priority += 400; // Not checked in 10+ min - bonus
+      } else if (timeSinceCheck > 300) {
+        priority += 200; // Not checked in 5+ min
+      } else if (timeSinceCheck > 120) {
+        priority += 100; // Not checked in 2+ min
+      }
 
       // Priority 5: Tokens with higher holder counts (more holders = more important)
       const holderCount = deployment.holderCount || 0;
@@ -916,9 +1111,23 @@ async function updateHolderCounts() {
       return { deployment, priority, lastCheck, recentVolume };
     });
 
-    // Sort by priority (highest first) and take top 5 for this cycle (paid plan allows more)
+    // Sort by priority (highest first) and filter out tokens with negative priority (recently checked)
     tokensWithPriority.sort((a, b) => b.priority - a.priority);
-    const toUpdate = tokensWithPriority.slice(0, 5).map(t => t.deployment);
+
+    // Filter out tokens that were checked too recently (negative priority) unless they're very new
+    const filteredByCooldown = tokensWithPriority.filter(t => {
+      const age = currentTimestamp - t.deployment.timestamp;
+      const isVeryNew = age < 3600; // Less than 1 hour old
+      const lastCheck = t.lastCheck || (t.deployment.holderCountHistory?.length > 0
+        ? t.deployment.holderCountHistory[t.deployment.holderCountHistory.length - 1].timestamp
+        : t.deployment.timestamp);
+      const timeSinceCheck = currentTimestamp - lastCheck;
+
+      // Allow if priority is positive OR if token is very new (less than 1 hour old)
+      return t.priority > 0 || (isVeryNew && timeSinceCheck > 60); // Very new tokens can be checked every minute
+    });
+
+    const toUpdate = filteredByCooldown.slice(0, 5).map(t => t.deployment);
 
     // Store volume data for tokens with activity (process sequentially to avoid Supabase rate limits)
     const tokensNeedingVolumeUpdate = tokensWithPriority.filter(t => t.recentVolume > 0);
@@ -926,10 +1135,11 @@ async function updateHolderCounts() {
     // Process volume updates sequentially with delays to avoid Supabase rate limits
     for (const { deployment, recentVolume } of tokensNeedingVolumeUpdate) {
       try {
-        // Convert transfer count to estimated ETH volume (rough estimate: 0.01 ETH per transfer)
-        // TODO: Improve to calculate actual ETH volume from Swap events
-        const volume24h = recentVolume * 0.01;
-        const volume7d = volume24h * 7; // Rough estimate
+        // Calculate actual ETH volume using Trace API for accurate metrics
+        const actualVolume = await calculateActualVolume(deployment, currentBlock, currentTimestamp);
+
+        const volume24h = actualVolume.volume24h;
+        const volume7d = actualVolume.volume7d;
 
         // Get existing volume history
         const volumeHistory = deployment.volumeHistory || [];
@@ -945,7 +1155,7 @@ async function updateHolderCounts() {
         });
 
         // Small delay between updates to avoid rate limits (frugal for paid plan)
-        await new Promise(resolve => setTimeout(resolve, 150));
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (err) {
         console.error(`Error updating volume for ${deployment.tokenName || 'token'}:`, err.message);
         // Continue with next token

@@ -382,15 +382,20 @@
 /* Newest 5 Table - Compact Horizontal */
 .newest-table-container {
   overflow-x: auto;
+  overflow-y: auto;
   border: 2px solid #16a34a;
   border-radius: 8px;
   background: #000000;
+  width: 100%;
+  max-width: 100%;
+  max-height: 60vh;
 }
 
 .newest-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
+  table-layout: auto;
 }
 
 .newest-table thead {
@@ -399,7 +404,7 @@
 }
 
 .newest-table th {
-  padding: 0.75rem 0.5rem;
+  padding: 0.6rem 0.5rem;
   text-align: left;
   color: #16a34a;
   font-weight: 600;
@@ -408,10 +413,26 @@
   white-space: nowrap;
 }
 
+.newest-table th:first-child {
+  padding-left: 0.75rem;
+}
+
+.newest-table th:last-child {
+  padding-right: 0.75rem;
+}
+
 .newest-table td {
-  padding: 0.5rem;
+  padding: 0.4rem 0.5rem;
   border-bottom: 1px solid #16a34a;
   color: #16a34a;
+}
+
+.newest-table td:first-child {
+  padding-left: 0.75rem;
+}
+
+.newest-table td:last-child {
+  padding-right: 0.75rem;
 }
 
 .newest-table tbody tr:hover {
@@ -425,15 +446,20 @@
 /* Main Database Table - Excel-like */
 .table-container {
   overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid #16a34a;
   border-radius: 8px;
   background: #000000;
+  width: 100%;
+  max-width: 100%;
+  max-height: 70vh;
 }
 
 .deployments-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
+  table-layout: auto;
 }
 
 .deployments-table thead {
@@ -444,8 +470,14 @@
   z-index: 10;
 }
 
+.newest-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
 .deployments-table th {
-  padding: 0.75rem 0.5rem;
+  padding: 0.6rem 0.5rem;
   text-align: left;
   color: #16a34a;
   font-weight: 600;
@@ -471,11 +503,13 @@
 }
 
 .deployments-table td {
-  padding: 0.5rem;
+  padding: 0.4rem 0.5rem;
   border-bottom: 1px solid #16a34a;
   border-right: 1px solid #16a34a;
   color: #16a34a;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .deployments-table td:last-child {
@@ -493,7 +527,12 @@
 /* Table Cell Styles */
 .token-name-cell {
   font-weight: 500;
-  min-width: 120px;
+  min-width: 100px;
+  max-width: 150px;
+}
+
+.address-cell {
+  max-width: 140px;
 }
 
 .address-cell code {
@@ -505,6 +544,10 @@
   cursor: pointer;
   transition: background 0.2s;
   border: 1px solid #16a34a;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .address-cell code:hover {
@@ -513,7 +556,8 @@
 }
 
 .dev-cell {
-  min-width: 120px;
+  min-width: 100px;
+  max-width: 150px;
 }
 
 .dev-cell code {
@@ -525,6 +569,10 @@
   cursor: pointer;
   transition: background 0.2s;
   border: 1px solid #16a34a;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dev-cell code:hover {
@@ -535,7 +583,8 @@
 .dev-buy-cell {
   color: #16a34a;
   font-weight: 600;
-  min-width: 80px;
+  min-width: 70px;
+  max-width: 100px;
 }
 
 .dev-buy-content {
@@ -559,7 +608,8 @@
 .holder-count-cell {
   color: #16a34a;
   text-align: center;
-  min-width: 100px;
+  min-width: 80px;
+  max-width: 120px;
   font-weight: 500;
 }
 
@@ -610,6 +660,8 @@
   font-weight: 500;
   font-size: 0.875rem;
   white-space: nowrap;
+  min-width: 90px;
+  max-width: 130px;
 }
 
 .holder-trend {
@@ -641,11 +693,13 @@
 .time-cell {
   color: #16a34a;
   opacity: 0.9;
-  min-width: 60px;
+  min-width: 50px;
+  max-width: 80px;
 }
 
 .links-cell {
-  min-width: 100px;
+  min-width: 90px;
+  max-width: 140px;
 }
 
 .compact-links {
@@ -887,6 +941,9 @@ a, button, code[onclick], .sortable {
 
   .mobile-deployments-list {
     display: block;
+    max-height: 70vh;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .token-gate-message {
@@ -1028,6 +1085,54 @@ a, button, code[onclick], .sortable {
   .newest-table-container,
   .table-container {
     display: block !important;
+    overflow-x: auto; /* Keep horizontal scroll if needed */
+    overflow-y: auto; /* Enable vertical scroll */
+  }
+
+  .newest-table,
+  .deployments-table {
+    table-layout: fixed; /* Use fixed layout on large screens for better control */
+  }
+
+  /* Make columns more flexible on large screens */
+  .newest-table th:first-child,
+  .newest-table td:first-child {
+    width: 12%;
+  }
+
+  .newest-table th:nth-child(2),
+  .newest-table td:nth-child(2) {
+    width: 14%;
+  }
+
+  .newest-table th:nth-child(3),
+  .newest-table td:nth-child(3) {
+    width: 14%;
+  }
+
+  .newest-table th:nth-child(4),
+  .newest-table td:nth-child(4) {
+    width: 10%;
+  }
+
+  .newest-table th:nth-child(5),
+  .newest-table td:nth-child(5) {
+    width: 12%;
+  }
+
+  .newest-table th:nth-child(6),
+  .newest-table td:nth-child(6) {
+    width: 13%;
+  }
+
+  .newest-table th:nth-child(7),
+  .newest-table td:nth-child(7) {
+    width: 8%;
+  }
+
+  .newest-table th:last-child,
+  .newest-table td:last-child {
+    width: 17%;
   }
 
   .mobile-deployment-card {
