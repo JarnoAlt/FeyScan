@@ -815,11 +815,12 @@ async function updateHolderCounts() {
     tokensWithPriority.sort((a, b) => b.priority - a.priority);
     const toUpdate = tokensWithPriority.slice(0, 3).map(t => t.deployment);
 
-    // Store volume data for all tokens (not just top 10)
-    // Update volume for tokens with activity
-    const volumeUpdatePromises = tokensWithPriority
-      .filter(t => t.recentVolume > 0)
-      .map(async ({ deployment, recentVolume }) => {
+    // Store volume data for tokens with activity (process sequentially to avoid Supabase rate limits)
+    const tokensWithVolume = tokensWithPriority.filter(t => t.recentVolume > 0);
+    
+    // Process volume updates sequentially with delays to avoid Supabase rate limits
+    for (const { deployment, recentVolume } of tokensWithVolume) {
+      try {
         // Convert transfer count to estimated ETH volume (rough estimate: 0.01 ETH per transfer)
         // TODO: Improve to calculate actual ETH volume from Swap events
         const volume24h = recentVolume * 0.01;
@@ -837,12 +838,14 @@ async function updateHolderCounts() {
           volume7d: volume7d,
           volumeHistory: newVolumeHistory
         });
-      });
-
-    // Update volumes in parallel (don't await, let it run in background)
-    Promise.all(volumeUpdatePromises).catch(err => {
-      console.error('Error updating volume data:', err);
-    });
+        
+        // Small delay between updates to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 200));
+      } catch (err) {
+        console.error(`Error updating volume for ${deployment.tokenName || 'token'}:`, err.message);
+        // Continue with next token
+      }
+    }
 
     if (toUpdate.length > 0) {
       const highVolumeCount = tokensWithPriority.slice(0, 10).filter(t => t.recentVolume > 10).length;
@@ -918,7 +921,7 @@ async function updateHolderCounts() {
           let chunkCount = 0;
           let rateLimitHit = false;
           let consecutiveErrors = 0;
-          
+
           while (chunkFrom < toBlock && chunkCount < maxChunks && !rateLimitHit) {
             const chunkTo = Math.min(chunkFrom + maxBlockRange, toBlock);
             try {
@@ -942,9 +945,9 @@ async function updateHolderCounts() {
                   }
                 }
               }
-              
+
               consecutiveErrors = 0; // Reset error counter on success
-              
+
               // Much longer delays between chunks to avoid rate limits
               if (chunkCount > 0) {
                 // Exponential backoff: 1s, 2s, 3s, etc.
@@ -956,7 +959,7 @@ async function updateHolderCounts() {
               }
             } catch (e) {
               consecutiveErrors++;
-              
+
               // If we hit rate limit, stop immediately and wait longer
               if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('exceeded') || e.message.includes('10 block range'))) {
                 rateLimitHit = true;
@@ -966,11 +969,11 @@ async function updateHolderCounts() {
                 break;
               }
               console.error(`  ⚠️  Error fetching logs for blocks ${chunkFrom}-${chunkTo}:`, e.message);
-              
+
               // Exponential backoff on errors
               const errorDelay = Math.min(5000, 1000 * Math.pow(2, consecutiveErrors));
               await new Promise(resolve => setTimeout(resolve, errorDelay));
-              
+
               // If too many consecutive errors, stop
               if (consecutiveErrors >= 3) {
                 rateLimitHit = true;
