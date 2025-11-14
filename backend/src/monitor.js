@@ -816,10 +816,10 @@ async function updateHolderCounts() {
     const toUpdate = tokensWithPriority.slice(0, 3).map(t => t.deployment);
 
     // Store volume data for tokens with activity (process sequentially to avoid Supabase rate limits)
-    const tokensWithVolume = tokensWithPriority.filter(t => t.recentVolume > 0);
+    const tokensNeedingVolumeUpdate = tokensWithPriority.filter(t => t.recentVolume > 0);
     
     // Process volume updates sequentially with delays to avoid Supabase rate limits
-    for (const { deployment, recentVolume } of tokensWithVolume) {
+    for (const { deployment, recentVolume } of tokensNeedingVolumeUpdate) {
       try {
         // Convert transfer count to estimated ETH volume (rough estimate: 0.01 ETH per transfer)
         // TODO: Improve to calculate actual ETH volume from Swap events
@@ -838,7 +838,7 @@ async function updateHolderCounts() {
           volume7d: volume7d,
           volumeHistory: newVolumeHistory
         });
-        
+
         // Small delay between updates to avoid rate limits
         await new Promise(resolve => setTimeout(resolve, 200));
       } catch (err) {
