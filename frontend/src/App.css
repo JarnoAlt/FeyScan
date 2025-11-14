@@ -1,0 +1,271 @@
+.App {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.App-header {
+  background: #000000;
+  padding: 2rem;
+  border-bottom: 2px solid #10b981;
+}
+
+.header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.header-main {
+  flex: 1;
+  text-align: center;
+  min-width: 300px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.fey-logo {
+  height: 60px;
+  width: auto;
+  margin-right: 1rem;
+}
+
+.App-header h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  color: #10b981;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: #000000;
+  border: 1px solid #10b981;
+}
+
+.status-indicator.online {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.status-indicator.offline {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.status-indicator.checking {
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.status-indicator.online .status-dot {
+  background: #10b981;
+}
+
+.status-indicator.offline .status-dot {
+  background: #ef4444;
+}
+
+.status-indicator.checking .status-dot {
+  background: #fbbf24;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+.subtitle {
+  color: #10b981;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  opacity: 0.8;
+}
+
+.contract-address {
+  color: #10b981;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  opacity: 0.7;
+}
+
+.contract-address code {
+  background: #000000;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  color: #10b981;
+  border: 1px solid #10b981;
+}
+
+/* Donation Section */
+.donation-section {
+  background: #000000;
+  border: 2px solid #10b981;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  min-width: 280px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.donation-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  justify-content: center;
+}
+
+.donation-icon {
+  font-size: 1.25rem;
+}
+
+.donation-title {
+  color: #10b981;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.donation-wallet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.wallet-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.wallet-label {
+  color: #10b981;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.wallet-address {
+  background: #000000;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  color: #10b981;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid #10b981;
+}
+
+.wallet-address:hover {
+  background: #10b981;
+  color: #000000;
+  transform: scale(1.05);
+}
+
+.copy-wallet-btn {
+  background: transparent;
+  border: 1px solid #10b981;
+  color: #10b981;
+  padding: 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-wallet-btn:hover {
+  background: #10b981;
+  color: #000000;
+  transform: scale(1.1);
+}
+
+.donation-link {
+  text-align: center;
+  color: #10b981;
+  text-decoration: none;
+  font-size: 0.75rem;
+  transition: color 0.2s;
+  padding: 0.25rem;
+}
+
+.donation-link:hover {
+  color: #34d399;
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .donation-section {
+    width: 100%;
+    max-width: 400px;
+  }
+}
+
+.App-main {
+  flex: 1;
+  padding: 2rem;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  background: #000000;
+}
+
+.loading, .error {
+  text-align: center;
+  padding: 2rem;
+  font-size: 1.125rem;
+}
+
+.loading {
+  color: #10b981;
+}
+
+.error {
+  color: #ef4444;
+  background: #000000;
+  border: 2px solid #ef4444;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
