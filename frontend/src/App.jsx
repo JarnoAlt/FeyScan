@@ -17,6 +17,7 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [seenDeployments, setSeenDeployments] = useState(new Set());
   const [isMuted, setIsMuted] = useState(false);
+  const [isSupportExpanded, setIsSupportExpanded] = useState(false);
   const { address, isConnected } = useAccount();
 
   // Wagmi automatically handles account changes - no manual listeners needed
@@ -224,72 +225,83 @@ function App() {
             </div>
           </div>
           <div className="donation-section">
-            <div className="donation-header">
+            <div
+              className="donation-header clickable"
+              onClick={() => setIsSupportExpanded(!isSupportExpanded)}
+            >
               <span className="donation-icon">💝</span>
               <span className="donation-title">Support the Dev</span>
+              <span className="donation-preview">
+                {!isSupportExpanded && '• Donation • Links • Message Board'}
+              </span>
+              <span className="expand-icon">{isSupportExpanded ? '▼' : '▶'}</span>
             </div>
-            <div className="donation-wallet">
-              <div className="wallet-info">
-                <span className="wallet-label">Send to:</span>
-                <code className="wallet-address" onClick={() => {
-                  navigator.clipboard.writeText('0x8DFBdEEC8c5d4970BB5F481C6ec7f73fa1C65be5');
-                  alert('Wallet address copied!');
-                }}>
-                  ionoi.eth
-                </code>
-                <button
-                  className="copy-wallet-btn"
-                  onClick={() => {
-                    navigator.clipboard.writeText('0x8DFBdEEC8c5d4970BB5F481C6ec7f73fa1C65be5');
-                    alert('Wallet address copied!');
-                  }}
-                  title="Copy wallet address"
-                >
-                  📋
-                </button>
+            {isSupportExpanded && (
+              <div className="donation-content">
+                <div className="donation-wallet">
+                  <div className="wallet-info">
+                    <span className="wallet-label">Send to:</span>
+                    <code className="wallet-address" onClick={() => {
+                      navigator.clipboard.writeText('0x8DFBdEEC8c5d4970BB5F481C6ec7f73fa1C65be5');
+                      alert('Wallet address copied!');
+                    }}>
+                      ionoi.eth
+                    </code>
+                    <button
+                      className="copy-wallet-btn"
+                      onClick={() => {
+                        navigator.clipboard.writeText('0x8DFBdEEC8c5d4970BB5F481C6ec7f73fa1C65be5');
+                        alert('Wallet address copied!');
+                      }}
+                      title="Copy wallet address"
+                    >
+                      📋
+                    </button>
+                  </div>
+                  <div className="donation-links">
+                    <a
+                      href="https://github.com/dutchiono/FeyScan"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="donation-link github-link"
+                      title="View on GitHub"
+                    >
+                      <span className="link-icon">🔗</span>
+                      <span>GitHub</span>
+                    </a>
+                    <a
+                      href="https://warpcast.com/ionoi"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="donation-link farcaster-link"
+                      title="Follow on Farcaster"
+                    >
+                      <span className="link-icon">🔗</span>
+                      <span>Farcaster</span>
+                    </a>
+                    <a
+                      href="https://x.com/FeyScan"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="donation-link twitter-link"
+                      title="Follow on X (Twitter)"
+                    >
+                      <span className="link-icon">🔗</span>
+                      <span>X (Twitter)</span>
+                    </a>
+                    <button
+                      className="donation-link about-link"
+                      onClick={() => setShowAbout(true)}
+                      title="About FeyScan"
+                    >
+                      <span className="link-icon">ℹ️</span>
+                      <span>About</span>
+                    </button>
+                  </div>
+                </div>
+                <MessageBoard />
               </div>
-              <div className="donation-links">
-                <a
-                  href="https://github.com/dutchiono/FeyScan"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="donation-link github-link"
-                  title="View on GitHub"
-                >
-                  <span className="link-icon">🔗</span>
-                  <span>GitHub</span>
-                </a>
-                <a
-                  href="https://warpcast.com/ionoi"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="donation-link farcaster-link"
-                  title="Follow on Farcaster"
-                >
-                  <span className="link-icon">🔗</span>
-                  <span>Farcaster</span>
-                </a>
-                <a
-                  href="https://x.com/FeyScan"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="donation-link twitter-link"
-                  title="Follow on X (Twitter)"
-                >
-                  <span className="link-icon">🔗</span>
-                  <span>X (Twitter)</span>
-                </a>
-                <button
-                  className="donation-link about-link"
-                  onClick={() => setShowAbout(true)}
-                  title="About FeyScan"
-                >
-                  <span className="link-icon">ℹ️</span>
-                  <span>About</span>
-                </button>
-              </div>
-            </div>
-            <MessageBoard />
+            )}
           </div>
         </div>
       </header>
