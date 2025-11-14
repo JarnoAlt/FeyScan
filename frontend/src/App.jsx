@@ -3,6 +3,7 @@ import { useAccount, useBalance } from 'wagmi';
 import { formatUnits } from 'viem';
 import TokenFeed from './components/TokenFeed';
 import WalletConnect from './components/WalletConnect';
+import MessageBoard from './components/MessageBoard';
 import { FEYSCAN_TOKEN_ADDRESS, REQUIRED_BALANCE, isWhitelisted } from './components/WalletConnect';
 import { getAllDeployments, getLatestDeployment, supabase } from './config/supabase.js';
 import './App.css';
@@ -288,6 +289,7 @@ function App() {
                 </button>
               </div>
             </div>
+            <MessageBoard />
           </div>
         </div>
       </header>
