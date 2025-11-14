@@ -46,6 +46,13 @@ const KNOWN_TOKENS = new Set([
   '0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca'.toLowerCase(), // USDbC on Base
 ]);
 
+// Known token names to exclude (case-insensitive)
+const KNOWN_TOKEN_NAMES = new Set([
+  'Wrapped Ether',
+  'WETH',
+  'FEY', // FEY token (the main FEY token, not deployments)
+]);
+
 let provider;
 let providerSecondary; // For parallel operations
 let lastCheckedBlock = null;
