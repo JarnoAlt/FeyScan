@@ -36,23 +36,9 @@ function App() {
   const [error, setError] = useState(null);
   const [serverStatus, setServerStatus] = useState('checking');
   const { address, isConnected } = useAccount();
-  
-  // Listen for account changes
-  useEffect(() => {
-    if (!window.ethereum) return;
-    
-    const handleAccountsChanged = () => {
-      // Account changed - force re-render by reloading
-      window.location.reload();
-    };
-    
-    window.ethereum.on('accountsChanged', handleAccountsChanged);
-    
-    return () => {
-      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-    };
-  }, []);
-  
+
+  // Wagmi automatically handles account changes - no manual listeners needed
+
   // Check token balance for gating
   const { data: tokenBalance } = useBalance({
     address: address,

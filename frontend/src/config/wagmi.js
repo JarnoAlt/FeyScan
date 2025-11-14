@@ -17,6 +17,7 @@ export const config = createConfig({
   transports: {
     [base.id]: http(),
   },
+  ssr: false, // Disable SSR to prevent hydration issues
 });
 
 // Create Web3Modal (only if projectId is set)

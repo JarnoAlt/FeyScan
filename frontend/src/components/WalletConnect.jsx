@@ -9,28 +9,9 @@ function WalletConnect() {
   const { address, isConnected, connector } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  
-  // Listen for account changes in MetaMask
-  useEffect(() => {
-    if (!window.ethereum) return;
-    
-    const handleAccountsChanged = (accounts) => {
-      if (accounts.length === 0) {
-        // User disconnected
-        disconnect();
-      } else {
-        // Account changed - wagmi should pick this up automatically
-        // Force a reconnect to update the address
-        window.location.reload();
-      }
-    };
-    
-    window.ethereum.on('accountsChanged', handleAccountsChanged);
-    
-    return () => {
-      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-    };
-  }, [disconnect]);
+
+  // Listen for account changes in MetaMask - wagmi handles this automatically
+  // No need for manual reload, wagmi's useAccount hook will update reactively
 
   // Get token balance
   const { data: tokenBalance, isLoading: balanceLoading } = useBalance({
