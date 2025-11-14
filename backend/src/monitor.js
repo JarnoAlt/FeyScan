@@ -1014,14 +1014,9 @@ async function updateHolderCounts() {
             });
           }
         } catch (e) {
-          // Skip if error
+          console.error(`  ⚠️  Error checking holders for ${deployment.tokenName || 'token'}:`, e.message);
         }
-      }));
-
-      // Small delay between batches to avoid rate limits
-      if (holderUpdateBatches.indexOf(batch) < holderUpdateBatches.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      })();
     }
   } catch (error) {
     console.error('Error updating holder counts:', error);
