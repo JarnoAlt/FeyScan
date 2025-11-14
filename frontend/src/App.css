@@ -238,7 +238,111 @@
   text-decoration: underline;
 }
 
-@media (max-width: 768px) {
+/* Mobile-first responsive breakpoints */
+/* Base styles are mobile-first (320px+) */
+
+/* Small mobile (320px - 479px) */
+@media (max-width: 479px) {
+  .App-header {
+    padding: 1rem;
+  }
+
+  .App-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .fey-logo {
+    height: 40px;
+  }
+
+  .title-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .status-indicator {
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+  }
+
+  .subtitle {
+    font-size: 0.875rem;
+  }
+
+  .token-address {
+    font-size: 0.75rem;
+  }
+
+  .donation-section {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    min-width: auto;
+  }
+
+  .wallet-connect-btn {
+    width: 100%;
+    padding: 0.625rem 1rem;
+    font-size: 0.75rem;
+  }
+
+  .wallet-info-container {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .wallet-address-display {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .wallet-disconnect-btn {
+    width: 100%;
+  }
+
+  .App-main {
+    padding: 1rem;
+  }
+
+  .App-footer {
+    padding: 1rem;
+  }
+
+  .footer-text {
+    font-size: 0.75rem;
+  }
+}
+
+/* Medium mobile (480px - 767px) */
+@media (min-width: 480px) and (max-width: 767px) {
+  .App-header {
+    padding: 1.5rem;
+  }
+
+  .App-header h1 {
+    font-size: 2rem;
+  }
+
+  .fey-logo {
+    height: 50px;
+  }
+
+  .donation-section {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .wallet-connect-btn {
+    padding: 0.75rem 1.25rem;
+  }
+
+  .App-main {
+    padding: 1.5rem;
+  }
+}
+
+/* Tablet (768px - 1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
   .header-content {
     flex-direction: column;
     align-items: center;
@@ -246,8 +350,13 @@
 
   .donation-section {
     width: 100%;
-    max-width: 400px;
+    max-width: 500px;
   }
+}
+
+/* Desktop (1024px+) - existing styles apply */
+@media (min-width: 1024px) {
+  /* Desktop styles are already defined above */
 }
 
 .App-main {

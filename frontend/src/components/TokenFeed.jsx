@@ -258,15 +258,15 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
     if (isMuted || hasEnoughTokens || alerts.length === 0) return; // Don't notify if muted, has access, or no alerts
 
     // Create a unique key for this alert set (based on count and newest alert)
-    const alertKey = alerts.length > 0 
-      ? `${alerts.length}-${alerts[0].txHash}` 
+    const alertKey = alerts.length > 0
+      ? `${alerts.length}-${alerts[0].txHash}`
       : `${alerts.length}`;
 
     if (!notifiedAboutMissingAlerts.has(alertKey)) {
       // Play a different sound to indicate they're missing alerts
       try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        
+
         // Play a lower, more urgent tone to indicate missing content
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
@@ -351,6 +351,94 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
   const getENSName = (address) => {
     if (!address) return null;
     return ensNames[address.toLowerCase()] || null;
+  };
+
+  // Mobile Deployment Card Component
+  const MobileDeploymentCard = ({ deployment }) => {
+    const ensName = getENSName(deployment.from);
+    const holderTrend = deployment.holderCountHistory && deployment.holderCountHistory.length > 1
+      ? (() => {
+          const history = deployment.holderCountHistory;
+          const current = history[history.length - 1].count;
+          const previous = history[history.length - 2].count;
+          const change = current - previous;
+          const changePercent = previous > 0 ? ((change / previous) * 100).toFixed(1) : 0;
+          const isRapid = Math.abs(changePercent) > 10;
+          return { change, changePercent, isRapid, trendClass: change > 0 ? 'up' : change < 0 ? 'down' : '' };
+        })()
+      : null;
+
+    return (
+      <div className="mobile-deployment-card">
+        <div className="mobile-card-header">
+          <div className="mobile-card-title">{deployment.tokenName || 'Unknown'}</div>
+          <div className="mobile-card-age">
+            <LiveTime timestamp={deployment.timestamp} />
+          </div>
+        </div>
+        <div className="mobile-card-row">
+          <span className="mobile-card-label">Token Address:</span>
+          <code
+            className="mobile-card-value"
+            onClick={() => copyToClipboard(deployment.tokenAddress)}
+            style={{ cursor: 'pointer', fontSize: '0.75rem' }}
+          >
+            {truncateAddress(deployment.tokenAddress)}
+          </code>
+        </div>
+        <div className="mobile-card-row">
+          <span className="mobile-card-label">Dev:</span>
+          <span className="mobile-card-value" style={{ fontSize: '0.75rem' }}>
+            {ensName || truncateAddress(deployment.from)}
+          </span>
+        </div>
+        <div className="mobile-card-row">
+          <span className="mobile-card-label">Dev Buy:</span>
+          <div className="mobile-card-value" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>{deployment.devBuyAmountFormatted || `${deployment.devBuyAmount || 0} ETH`}</span>
+            {deployment.devSold && (
+              <span className="dev-sold-badge">SOLD</span>
+            )}
+          </div>
+        </div>
+        <div className="mobile-card-row">
+          <span className="mobile-card-label">Holders:</span>
+          <div className="mobile-card-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <span className={`holder-count-number ${holderTrend?.trendClass || ''} ${holderTrend?.isRapid ? 'rapid' : ''}`}>
+                {deployment.holderCount !== undefined ? deployment.holderCount : '-'}
+              </span>
+              {holderTrend && holderTrend.change > 0 && (
+                <span className={`holder-trend up ${holderTrend.isRapid ? 'rapid' : ''}`}>↑</span>
+              )}
+              {holderTrend && holderTrend.change < 0 && (
+                <span className={`holder-trend down ${holderTrend.isRapid ? 'rapid' : ''}`}>↓</span>
+              )}
+            </div>
+            <HolderCheckTime
+              lastCheckTime={deployment.lastHolderCheck || (deployment.holderCountHistory && deployment.holderCountHistory.length > 0 ? deployment.holderCountHistory[deployment.holderCountHistory.length - 1].timestamp : null)}
+            />
+          </div>
+        </div>
+        <div className="mobile-card-links">
+          {deployment.links?.dexscreener && (
+            <a href={deployment.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link" title="DexScreener">
+              DexScreener
+            </a>
+          )}
+          {deployment.links?.defined && (
+            <a href={deployment.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link" title="Defined.fi">
+              Defined.fi
+            </a>
+          )}
+          {deployment.links?.basescan && (
+            <a href={deployment.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link" title="BaseScan">
+              BaseScan
+            </a>
+          )}
+        </div>
+      </div>
+    );
   };
 
   if (deployments.length === 0) {
@@ -514,6 +602,13 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
             <div className="section-header">
               <h2>Newest 5 Deployments</h2>
             </div>
+            {/* Mobile Card View */}
+            <div className="mobile-deployments-list">
+              {newest5.map((deployment, index) => (
+                <MobileDeploymentCard key={deployment.txHash || index} deployment={deployment} />
+              ))}
+            </div>
+            {/* Desktop Table View */}
             <div className="newest-table-container">
               <table className="newest-table">
                 <thead>
@@ -626,6 +721,13 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
             <div className="section-header">
               <h2>All Deployments ({filteredDeployments.length}{filteredDeployments.length !== deployments.length ? ` / ${deployments.length}` : ''})</h2>
             </div>
+            {/* Mobile Card View */}
+            <div className="mobile-deployments-list">
+              {sortedDeployments.map((deployment, index) => (
+                <MobileDeploymentCard key={deployment.txHash || index + 5} deployment={deployment} />
+              ))}
+            </div>
+            {/* Desktop Table View */}
             <div className="table-container">
               <table className="deployments-table">
                 <thead>

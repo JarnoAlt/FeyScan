@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAccount, useBalance } from 'wagmi';
 import { formatUnits } from 'viem';
+import { sdk } from '@farcaster/miniapp-sdk';
 import TokenFeed from './components/TokenFeed';
 import WalletConnect from './components/WalletConnect';
 import { FEYSCAN_TOKEN_ADDRESS, REQUIRED_BALANCE, isWhitelisted } from './components/WalletConnect';
@@ -13,21 +14,27 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dbStatus, setDbStatus] = useState('checking');
+  const [isFarcasterContext, setIsFarcasterContext] = useState(false);
+  const [farcasterAddress, setFarcasterAddress] = useState(null);
   const { address, isConnected } = useAccount();
 
   // Wagmi automatically handles account changes - no manual listeners needed
 
-  // Check token balance for gating
+  // Use Farcaster address if in mini app context, otherwise use wagmi address
+  const activeAddress = isFarcasterContext ? farcasterAddress : address;
+  const activeIsConnected = isFarcasterContext ? !!farcasterAddress : isConnected;
+
+  // Check token balance for gating - only if not in Farcaster context (Farcaster has its own wallet)
   const { data: tokenBalance } = useBalance({
-    address: address,
+    address: activeAddress,
     token: FEYSCAN_TOKEN_ADDRESS,
     chainId: 8453, // Base mainnet
     query: {
-      enabled: isConnected && !!address,
+      enabled: !isFarcasterContext && activeIsConnected && !!activeAddress,
     },
   });
 
-  const isWhitelistedDev = address && isWhitelisted(address);
+  const isWhitelistedDev = activeAddress && isWhitelisted(activeAddress);
   const hasEnoughTokens = tokenBalance && tokenBalance.value >= REQUIRED_BALANCE;
   const hasAccess = isWhitelistedDev || hasEnoughTokens;
 
@@ -74,6 +81,29 @@ function App() {
   };
 
   useEffect(() => {
+    // CRITICAL: Call ready() immediately - this must happen ASAP to dismiss splash screen
+    (async () => {
+      try {
+        await sdk.actions.ready();
+        console.log('✅ SDK ready() called - splash screen should dismiss');
+        setIsFarcasterContext(true);
+
+        // Try to get wallet address from Farcaster SDK
+        try {
+          const wallet = await sdk.actions.getEthereumWallet();
+          if (wallet && wallet.address) {
+            setFarcasterAddress(wallet.address);
+            console.log('✅ Farcaster wallet address:', wallet.address);
+          }
+        } catch (e) {
+          console.log('Could not get Farcaster wallet (may need user approval):', e.message);
+        }
+      } catch (e) {
+        // If ready() fails, we're not in Farcaster context - this is fine for web
+        console.log('Not in Farcaster context (normal for web):', e.message);
+      }
+    })();
+
     // Request notification permission
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
@@ -113,9 +143,25 @@ function App() {
                       <span className="status-dot"></span>
                       <span className="status-text">{dbStatus === 'online' ? 'Online' : dbStatus === 'offline' ? 'Offline' : 'Checking...'}</span>
                     </div>
-                    <div className="wallet-connect-wrapper">
-                      <WalletConnect />
-                    </div>
+                    {!isFarcasterContext && (
+                      <div className="wallet-connect-wrapper">
+                        <WalletConnect />
+                      </div>
+                    )}
+                    {isFarcasterContext && farcasterAddress && (
+                      <div className="wallet-info-container">
+                        <div className="wallet-address-display">
+                          <span className="wallet-address-text">
+                            {farcasterAddress ? `${farcasterAddress.slice(0, 6)}...${farcasterAddress.slice(-4)}` : 'Not connected'}
+                          </span>
+                          {hasAccess && (
+                            <span className="token-badge" title={isWhitelistedDev ? 'Dev Access' : 'Farcaster Wallet'}>
+                              {isWhitelistedDev ? '✓ Dev' : '✓ Farcaster'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
             <p className="subtitle">Live monitoring of token deployments on Base Network</p>
             <p className="token-address">
