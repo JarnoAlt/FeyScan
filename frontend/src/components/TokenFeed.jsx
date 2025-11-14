@@ -117,6 +117,41 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
     return `<0.01 ETH`;
   };
 
+  // Calculate runner score: combines volume, holder growth %, and absolute growth
+  const calculateRunnerScore = (deployment) => {
+    const volume24h = deployment.volume24h || 0;
+
+    // Calculate holder growth
+    let growthPercent = 0;
+    let absGrowth = 0;
+    const history = deployment.holderCountHistory || [];
+    if (history.length >= 2) {
+      const recent = history[history.length - 1];
+      const previous = history[history.length - 2];
+      const currentCount = recent.count || 0;
+      const previousCount = previous.count || 0;
+      absGrowth = currentCount - previousCount;
+      growthPercent = previousCount > 0 ? (absGrowth / previousCount) * 100 : (absGrowth > 0 ? 100 : 0);
+    }
+
+    // Normalize values for scoring
+    // Volume: use as-is (already in ETH)
+    // Growth %: divide by 10 to normalize (so 10% = 1.0)
+    // Abs growth: use as-is but cap at 50 for scoring
+    const normalizedGrowth = Math.min(growthPercent / 10, 10); // Cap at 100% growth = 10 points
+    const normalizedAbsGrowth = Math.min(absGrowth, 50); // Cap at 50 holders growth
+
+    // Score formula: (volume24h * 0.4) + (growthPercent * 0.4) + (absGrowth * 0.2)
+    const score = (volume24h * 0.4) + (normalizedGrowth * 0.4) + (normalizedAbsGrowth * 0.2);
+
+    return {
+      score: Math.max(0, score), // Ensure non-negative
+      volume24h,
+      growthPercent,
+      absGrowth
+    };
+  };
+
   const truncateAddress = (address) => {
     if (!address || address === 'N/A') return 'N/A';
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -313,16 +348,35 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
     }
   }, [alerts, hasAccess, isMuted, notifiedAboutMissingAlerts]);
 
-  // Get newest 5 from filtered
+  // Calculate runners: tokens with high volume and growing holder counts
+  const runners = useMemo(() => {
+    return filteredDeployments
+      .map(deployment => ({
+        ...deployment,
+        runnerData: calculateRunnerScore(deployment)
+      }))
+      .filter(d => d.runnerData.score > 0.1) // Threshold for runner
+      .sort((a, b) => b.runnerData.score - a.runnerData.score)
+      .slice(0, 10); // Top 10 runners
+  }, [filteredDeployments]);
+
+  // Get newest 5 from filtered (with runner data)
   const newest5 = useMemo(() => {
     return [...filteredDeployments]
+      .map(d => ({
+        ...d,
+        runnerData: calculateRunnerScore(d)
+      }))
       .sort((a, b) => b.timestamp - a.timestamp)
       .slice(0, 5);
   }, [filteredDeployments]);
 
   // Get all deployments, sorted (including newest 5)
   const sortedDeployments = useMemo(() => {
-    const rest = filteredDeployments;
+    const rest = filteredDeployments.map(d => ({
+      ...d,
+      runnerData: calculateRunnerScore(d)
+    }));
     return [...rest].sort((a, b) => {
       let aVal, bVal;
       switch (sortField) {
@@ -337,6 +391,18 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
         case 'tokenName':
           aVal = (a.tokenName || '').toLowerCase();
           bVal = (b.tokenName || '').toLowerCase();
+          break;
+        case 'holderCount':
+          aVal = a.holderCount || 0;
+          bVal = b.holderCount || 0;
+          break;
+        case 'volume24h':
+          aVal = a.volume24h || 0;
+          bVal = b.volume24h || 0;
+          break;
+        case 'runnerScore':
+          aVal = a.runnerData?.score || 0;
+          bVal = b.runnerData?.score || 0;
           break;
         default:
           aVal = a.timestamp || 0;
@@ -615,6 +681,108 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
 
       {/* Main Content */}
       <div className="main-content">
+        {/* Hot Runners Section - Token Gated */}
+        {!hasAccess && runners.length > 0 && (
+          <div className="token-gate-message">
+            <div className="gate-content">
+              <h2>🔒 Token Gated Content</h2>
+              <p>Hold at least 10,000,000 FeyScan tokens to view Hot Runners.</p>
+              <p className="gate-subtext">Connect your wallet to check your balance.</p>
+            </div>
+          </div>
+        )}
+        {hasAccess && runners.length > 0 && (
+          <div className="runners-section">
+            <div className="section-header">
+              <h2>🔥 Hot Runners</h2>
+              <span className="runners-count">{runners.length} active</span>
+            </div>
+            <div className="runners-table-container">
+              <table className="runners-table">
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Token</th>
+                    <th>Holders</th>
+                    <th>Growth</th>
+                    <th>Volume 24h</th>
+                    <th>Score</th>
+                    <th>Links</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {runners.map((runner, index) => {
+                    const ensName = getENSName(runner.from);
+                    const history = runner.holderCountHistory || [];
+                    const holderTrend = history.length >= 2 ? (() => {
+                      const recent = history[history.length - 1];
+                      const previous = history[history.length - 2];
+                      const change = recent.count - previous.count;
+                      const changePercent = previous.count > 0 ? (change / previous.count) * 100 : 0;
+                      return { change, changePercent, isRapid: Math.abs(changePercent) > 20 };
+                    })() : null;
+
+                    return (
+                      <tr key={runner.txHash || index} className={`runner-row ${index < 3 ? 'top-runner' : ''}`}>
+                        <td className="runner-rank">
+                          {index < 3 && <span className="runner-badge">🔥</span>}
+                          <span className="rank-number">#{index + 1}</span>
+                        </td>
+                        <td className="token-name-cell">
+                          <strong>{runner.tokenName || 'Unknown'}</strong>
+                        </td>
+                        <td className="holder-count-cell">
+                          <div className="holder-count-display">
+                            <div className="holder-count-main">
+                              <span className={`holder-count-number ${holderTrend?.change > 0 ? 'up' : ''}`}>
+                                {runner.holderCount !== undefined ? runner.holderCount : '-'}
+                              </span>
+                              {holderTrend && holderTrend.change > 0 && (
+                                <span className={`holder-trend up ${holderTrend.isRapid ? 'rapid' : ''}`}>↑</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="growth-cell">
+                          {runner.runnerData.growthPercent > 0 ? (
+                            <span className={`growth-indicator ${runner.runnerData.growthPercent > 20 ? 'rapid' : runner.runnerData.growthPercent > 10 ? 'high' : 'medium'}`}>
+                              +{runner.runnerData.growthPercent.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="growth-indicator">-</span>
+                          )}
+                        </td>
+                        <td className="volume-cell">
+                          {formatVolume(runner.runnerData.volume24h)}
+                          {runner.runnerData.volume24h > 0.1 && <span className="volume-badge">💰</span>}
+                        </td>
+                        <td className="score-cell">
+                          <span className={`runner-score ${runner.runnerData.score > 0.5 ? 'high' : runner.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
+                            {runner.runnerData.score.toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="links-cell">
+                          <div className="compact-links">
+                            {runner.links?.dexscreener && (
+                              <a href={runner.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link">DS</a>
+                            )}
+                            {runner.links?.defined && (
+                              <a href={runner.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link">DF</a>
+                            )}
+                            {runner.links?.basescan && (
+                              <a href={runner.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link">BS</a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Newest 5 Section - Token Gated */}
         {!hasAccess && (
           <div className="token-gate-message">
@@ -664,25 +832,60 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                 <tbody>
                   {newest5.map((deployment, index) => {
                     const ensName = getENSName(deployment.from);
+                    const history = deployment.holderCountHistory || [];
+                    const holderTrend = history.length >= 2 ? (() => {
+                      const recent = history[history.length - 1];
+                      const previous = history[history.length - 2];
+                      const change = recent.count - previous.count;
+                      const changePercent = previous.count > 0 ? (change / previous.count) * 100 : 0;
+                      return { change, changePercent, isRapid: Math.abs(changePercent) > 20 };
+                    })() : null;
+                    const isRunner = deployment.runnerData?.score > 0.1;
+                    const isHighVolume = (deployment.volume24h || 0) > 0.1;
+
                     return (
-                      <tr key={deployment.txHash || index} className="newest-row">
+                      <tr key={deployment.txHash || index} className={`newest-row ${isRunner ? 'runner-highlight' : ''}`}>
                         <td className="token-name-cell">
-                          <strong>{deployment.tokenName || 'Unknown'}</strong>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <strong>{deployment.tokenName || 'Unknown'}</strong>
+                            {isRunner && <span className="runner-badge-small" title="Hot Runner">🔥</span>}
+                            {holderTrend && holderTrend.change > 0 && <span className="growth-badge-small" title="Growing">📈</span>}
+                            {isHighVolume && <span className="volume-badge-small" title="High Volume">💰</span>}
+                          </div>
                         </td>
-                        <td className="address-cell">
-                          <code onClick={() => copyToClipboard(deployment.tokenAddress)}>
-                            {truncateAddress(deployment.tokenAddress)}
-                          </code>
+                        <td className="holder-count-cell">
+                          <div className="holder-count-display">
+                            <div className="holder-count-main">
+                              <span className={`holder-count-number ${holderTrend?.change > 0 ? 'up' : holderTrend?.change < 0 ? 'down' : ''} ${holderTrend?.isRapid ? 'rapid' : ''}`}>
+                                {deployment.holderCount !== undefined ? deployment.holderCount : '-'}
+                              </span>
+                              {holderTrend && holderTrend.change > 0 && (
+                                <span className={`holder-trend up ${holderTrend.isRapid ? 'rapid' : ''}`} title={`+${holderTrend.change} (+${holderTrend.changePercent.toFixed(1)}%)`}>↑</span>
+                              )}
+                              {holderTrend && holderTrend.change < 0 && (
+                                <span className={`holder-trend down`} title={`${holderTrend.change} (${holderTrend.changePercent.toFixed(1)}%)`}>↓</span>
+                              )}
+                            </div>
+                            <HolderCheckTime lastCheckTime={deployment.lastHolderCheck || (history.length > 0 ? history[history.length - 1].timestamp : null)} />
+                          </div>
                         </td>
-                        <td className="dev-cell">
-                          {ensName ? (
-                            <a href={`https://basescan.org/address/${deployment.from}`} target="_blank" rel="noopener noreferrer" className="ens-name-link">
-                              <span className="ens-name">{ensName}</span>
-                            </a>
+                        <td className="growth-cell">
+                          {holderTrend && holderTrend.changePercent > 0 ? (
+                            <span className={`growth-indicator ${holderTrend.changePercent > 20 ? 'rapid' : holderTrend.changePercent > 10 ? 'high' : 'medium'}`}>
+                              +{holderTrend.changePercent.toFixed(1)}%
+                            </span>
                           ) : (
-                            <code onClick={() => copyToClipboard(deployment.from)}>
-                              {truncateAddress(deployment.from)}
-                            </code>
+                            <span className="growth-indicator">-</span>
+                          )}
+                        </td>
+                        <td className="volume-cell">
+                          {formatVolume(deployment.volume24h)}
+                        </td>
+                        <td className="score-cell">
+                          {deployment.runnerData && (
+                            <span className={`runner-score ${deployment.runnerData.score > 0.5 ? 'high' : deployment.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
+                              {deployment.runnerData.score.toFixed(2)}
+                            </span>
                           )}
                         </td>
                         <td className="dev-buy-cell">
@@ -694,37 +897,6 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                               </span>
                             )}
                           </div>
-                        </td>
-                        <td className="holder-count-cell">
-                          <div className="holder-count-display">
-                            <div className="holder-count-main">
-                              {deployment.holderCountHistory && deployment.holderCountHistory.length > 1 ? (() => {
-                                const history = deployment.holderCountHistory;
-                                const current = history[history.length - 1].count;
-                                const previous = history[history.length - 2].count;
-                                const change = current - previous;
-                                const changePercent = previous > 0 ? ((change / previous) * 100).toFixed(1) : 0;
-                                const isRapid = Math.abs(changePercent) > 10;
-                                const trendClass = change > 0 ? 'up' : change < 0 ? 'down' : '';
-
-                                return (
-                                  <>
-                                    <span className={`holder-count-number ${trendClass} ${isRapid ? 'rapid' : ''}`}>
-                                      {deployment.holderCount !== undefined ? deployment.holderCount : '-'}
-                                    </span>
-                                    {change > 0 && <span className={`holder-trend up ${isRapid ? 'rapid' : ''}`} title={`+${change} (+${changePercent}%)`}>↑</span>}
-                                    {change < 0 && <span className={`holder-trend down ${isRapid ? 'rapid' : ''}`} title={`${change} (${changePercent}%)`}>↓</span>}
-                                  </>
-                                );
-                              })() : (
-                                <span className="holder-count-number">{deployment.holderCount !== undefined ? deployment.holderCount : '-'}</span>
-                              )}
-                            </div>
-                            <HolderCheckTime lastCheckTime={deployment.lastHolderCheck || (deployment.holderCountHistory && deployment.holderCountHistory.length > 0 ? deployment.holderCountHistory[deployment.holderCountHistory.length - 1].timestamp : null)} />
-                          </div>
-                        </td>
-                        <td className="volume-cell">
-                          {formatVolume(deployment.volume24h)}
                         </td>
                         <td className="time-cell">
                           <LiveTime timestamp={deployment.timestamp} />
@@ -751,7 +923,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
           </div>
         )}
 
-        {/* Sortable Database Section */}
+        {/* All Deployments Section - FREE (Not Token Gated) */}
         {sortedDeployments.length > 0 && (
           <div className="database-section">
             <div className="section-header">
@@ -771,16 +943,18 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                     <th className="sortable" onClick={() => handleSort('tokenName')}>
                       Token <SortArrow field="tokenName" />
                     </th>
-                    <th>Address</th>
-                    <th>Dev</th>
-                    <th className="sortable" onClick={() => handleSort('devBuyAmount')}>
-                      Dev Buy <SortArrow field="devBuyAmount" />
-                    </th>
                     <th className="sortable" onClick={() => handleSort('holderCount')}>
                       Holders <SortArrow field="holderCount" />
                     </th>
+                    <th>Growth</th>
                     <th className="sortable" onClick={() => handleSort('volume24h')}>
                       Volume 24h <SortArrow field="volume24h" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('runnerScore')}>
+                      Score <SortArrow field="runnerScore" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('devBuyAmount')}>
+                      Dev Buy <SortArrow field="devBuyAmount" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('timestamp')}>
                       Age <SortArrow field="timestamp" />
@@ -791,25 +965,60 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                 <tbody>
                   {sortedDeployments.map((deployment, index) => {
                     const ensName = getENSName(deployment.from);
+                    const history = deployment.holderCountHistory || [];
+                    const holderTrend = history.length >= 2 ? (() => {
+                      const recent = history[history.length - 1];
+                      const previous = history[history.length - 2];
+                      const change = recent.count - previous.count;
+                      const changePercent = previous.count > 0 ? (change / previous.count) * 100 : 0;
+                      return { change, changePercent, isRapid: Math.abs(changePercent) > 20 };
+                    })() : null;
+                    const isRunner = deployment.runnerData?.score > 0.1;
+                    const isHighVolume = (deployment.volume24h || 0) > 0.1;
+
                     return (
-                      <tr key={deployment.txHash || index + 5}>
+                      <tr key={deployment.txHash || index + 5} className={isRunner ? 'runner-highlight' : ''}>
                         <td className="token-name-cell">
-                          <strong>{deployment.tokenName || 'Unknown'}</strong>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <strong>{deployment.tokenName || 'Unknown'}</strong>
+                            {isRunner && <span className="runner-badge-small" title="Hot Runner">🔥</span>}
+                            {holderTrend && holderTrend.change > 0 && <span className="growth-badge-small" title="Growing">📈</span>}
+                            {isHighVolume && <span className="volume-badge-small" title="High Volume">💰</span>}
+                          </div>
                         </td>
-                        <td className="address-cell">
-                          <code onClick={() => copyToClipboard(deployment.tokenAddress)} title={deployment.tokenAddress}>
-                            {truncateAddress(deployment.tokenAddress)}
-                          </code>
+                        <td className="holder-count-cell">
+                          <div className="holder-count-display">
+                            <div className="holder-count-main">
+                              <span className={`holder-count-number ${holderTrend?.change > 0 ? 'up' : holderTrend?.change < 0 ? 'down' : ''} ${holderTrend?.isRapid ? 'rapid' : ''}`}>
+                                {deployment.holderCount !== undefined ? deployment.holderCount : '-'}
+                              </span>
+                              {holderTrend && holderTrend.change > 0 && (
+                                <span className={`holder-trend up ${holderTrend.isRapid ? 'rapid' : ''}`} title={`+${holderTrend.change} (+${holderTrend.changePercent.toFixed(1)}%)`}>↑</span>
+                              )}
+                              {holderTrend && holderTrend.change < 0 && (
+                                <span className={`holder-trend down`} title={`${holderTrend.change} (${holderTrend.changePercent.toFixed(1)}%)`}>↓</span>
+                              )}
+                            </div>
+                            <HolderCheckTime lastCheckTime={deployment.lastHolderCheck || (history.length > 0 ? history[history.length - 1].timestamp : null)} />
+                          </div>
                         </td>
-                        <td className="dev-cell">
-                          {ensName ? (
-                            <a href={`https://basescan.org/address/${deployment.from}`} target="_blank" rel="noopener noreferrer" className="ens-name-link">
-                              <span className="ens-name">{ensName}</span>
-                            </a>
+                        <td className="growth-cell">
+                          {holderTrend && holderTrend.changePercent > 0 ? (
+                            <span className={`growth-indicator ${holderTrend.changePercent > 20 ? 'rapid' : holderTrend.changePercent > 10 ? 'high' : 'medium'}`}>
+                              +{holderTrend.changePercent.toFixed(1)}%
+                            </span>
                           ) : (
-                            <code onClick={() => copyToClipboard(deployment.from)} title={deployment.from}>
-                              {truncateAddress(deployment.from)}
-                            </code>
+                            <span className="growth-indicator">-</span>
+                          )}
+                        </td>
+                        <td className="volume-cell">
+                          {formatVolume(deployment.volume24h)}
+                        </td>
+                        <td className="score-cell">
+                          {deployment.runnerData && (
+                            <span className={`runner-score ${deployment.runnerData.score > 0.5 ? 'high' : deployment.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
+                              {deployment.runnerData.score.toFixed(2)}
+                            </span>
                           )}
                         </td>
                         <td className="dev-buy-cell">
@@ -821,37 +1030,6 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                               </span>
                             )}
                           </div>
-                        </td>
-                        <td className="holder-count-cell">
-                          <div className="holder-count-display">
-                            <div className="holder-count-main">
-                              {deployment.holderCountHistory && deployment.holderCountHistory.length > 1 ? (() => {
-                                const history = deployment.holderCountHistory;
-                                const current = history[history.length - 1].count;
-                                const previous = history[history.length - 2].count;
-                                const change = current - previous;
-                                const changePercent = previous > 0 ? ((change / previous) * 100).toFixed(1) : 0;
-                                const isRapid = Math.abs(changePercent) > 10;
-                                const trendClass = change > 0 ? 'up' : change < 0 ? 'down' : '';
-
-                                return (
-                                  <>
-                                    <span className={`holder-count-number ${trendClass} ${isRapid ? 'rapid' : ''}`}>
-                                      {deployment.holderCount !== undefined ? deployment.holderCount : '-'}
-                                    </span>
-                                    {change > 0 && <span className={`holder-trend up ${isRapid ? 'rapid' : ''}`} title={`+${change} (+${changePercent}%)`}>↑</span>}
-                                    {change < 0 && <span className={`holder-trend down ${isRapid ? 'rapid' : ''}`} title={`${change} (${changePercent}%)`}>↓</span>}
-                                  </>
-                                );
-                              })() : (
-                                <span className="holder-count-number">{deployment.holderCount !== undefined ? deployment.holderCount : '-'}</span>
-                              )}
-                            </div>
-                            <HolderCheckTime lastCheckTime={deployment.lastHolderCheck || (deployment.holderCountHistory && deployment.holderCountHistory.length > 0 ? deployment.holderCountHistory[deployment.holderCountHistory.length - 1].timestamp : null)} />
-                          </div>
-                        </td>
-                        <td className="volume-cell">
-                          {formatVolume(deployment.volume24h)}
                         </td>
                         <td className="time-cell">
                           <LiveTime timestamp={deployment.timestamp} />

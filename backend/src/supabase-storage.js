@@ -55,6 +55,7 @@ function deploymentToDB(deployment) {
     volume_24h: deployment.volume24h || 0,
     volume_7d: deployment.volume7d || 0,
     volume_history: deployment.volumeHistory || [],
+    is_pruned: deployment.isPruned || false,
     links: deployment.links || {}
   };
 }
@@ -81,6 +82,7 @@ function dbToDeployment(row) {
     volume24h: parseFloat(row.volume_24h) || 0,
     volume7d: parseFloat(row.volume_7d) || 0,
     volumeHistory: row.volume_history || [],
+    isPruned: row.is_pruned || false,
     links: row.links || {}
   };
 }
@@ -210,6 +212,7 @@ export async function updateDeployment(txHash, updates) {
     if (updates.volume24h !== undefined) dbUpdates.volume_24h = updates.volume24h;
     if (updates.volume7d !== undefined) dbUpdates.volume_7d = updates.volume7d;
     if (updates.volumeHistory !== undefined) dbUpdates.volume_history = updates.volumeHistory;
+    if (updates.isPruned !== undefined) dbUpdates.is_pruned = updates.isPruned;
 
     const { error } = await supabase
       .from('deployments')

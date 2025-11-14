@@ -284,6 +284,183 @@
   margin-top: 1rem !important;
 }
 
+/* Hot Runners Section */
+.runners-section {
+  margin-bottom: 2rem;
+}
+
+.runners-count {
+  color: #22c55e;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+  background: rgba(22, 163, 74, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(22, 163, 74, 0.3);
+}
+
+.runners-table-container {
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1px solid rgba(22, 163, 74, 0.4);
+  border-radius: 8px;
+  background: #000000;
+  width: 100%;
+  max-width: 100%;
+  max-height: 60vh;
+}
+
+.runners-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  table-layout: auto;
+}
+
+.runners-table thead {
+  background: #000000;
+  border-bottom: 2px solid rgba(22, 163, 74, 0.4);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.runners-table th {
+  padding: 0.7rem 0.6rem;
+  text-align: left;
+  color: #16a34a;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.runners-table td {
+  padding: 0.6rem;
+  border-bottom: 1px solid rgba(22, 163, 74, 0.3);
+  color: #16a34a;
+}
+
+.runners-table tbody tr.runner-row {
+  transition: all 0.2s;
+}
+
+.runners-table tbody tr.runner-row:hover {
+  background: rgba(22, 163, 74, 0.05);
+}
+
+.runners-table tbody tr.top-runner {
+  background: rgba(22, 163, 74, 0.08);
+  border-left: 3px solid #16a34a;
+}
+
+.runners-table tbody tr.top-runner:hover {
+  background: rgba(22, 163, 74, 0.12);
+}
+
+.runner-rank {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.runner-badge {
+  font-size: 1.2rem;
+}
+
+.rank-number {
+  color: #16a34a;
+  font-size: 0.875rem;
+}
+
+.runner-badge-small,
+.growth-badge-small,
+.volume-badge-small {
+  font-size: 0.875rem;
+  display: inline-block;
+  margin-left: 0.25rem;
+}
+
+.growth-cell {
+  text-align: center;
+  min-width: 80px;
+}
+
+.growth-indicator {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.growth-indicator.rapid {
+  background: rgba(22, 163, 74, 0.2);
+  color: #22c55e;
+  border: 1px solid rgba(22, 163, 74, 0.4);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0);
+  }
+}
+
+.growth-indicator.high {
+  background: rgba(22, 163, 74, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(22, 163, 74, 0.3);
+}
+
+.growth-indicator.medium {
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.score-cell {
+  text-align: center;
+  min-width: 70px;
+}
+
+.runner-score {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.runner-score.high {
+  background: rgba(22, 163, 74, 0.2);
+  color: #22c55e;
+  border: 1px solid rgba(22, 163, 74, 0.4);
+}
+
+.runner-score.medium {
+  background: rgba(22, 163, 74, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(22, 163, 74, 0.3);
+}
+
+.runner-score.low {
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.volume-badge {
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+}
+
 .newest-section {
   margin-bottom: 2rem;
 }
@@ -383,7 +560,7 @@
 .newest-table-container {
   overflow-x: auto;
   overflow-y: auto;
-  border: 2px solid #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.4);
   border-radius: 8px;
   background: #000000;
   width: 100%;
@@ -394,13 +571,14 @@
 .newest-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   table-layout: auto;
+  line-height: 1.5;
 }
 
 .newest-table thead {
   background: #000000;
-  border-bottom: 2px solid #16a34a;
+  border-bottom: 2px solid rgba(22, 163, 74, 0.4);
 }
 
 .newest-table th {
@@ -422,9 +600,18 @@
 }
 
 .newest-table td {
-  padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid #16a34a;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid rgba(22, 163, 74, 0.3);
   color: #16a34a;
+}
+
+.newest-table tbody tr.runner-highlight {
+  background: rgba(22, 163, 74, 0.05);
+  border-left: 2px solid rgba(22, 163, 74, 0.5);
+}
+
+.newest-table tbody tr.runner-highlight:hover {
+  background: rgba(22, 163, 74, 0.1);
 }
 
 .newest-table td:first-child {
@@ -447,7 +634,7 @@
 .table-container {
   overflow-x: auto;
   overflow-y: auto;
-  border: 1px solid #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.4);
   border-radius: 8px;
   background: #000000;
   width: 100%;
@@ -458,13 +645,14 @@
 .deployments-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   table-layout: auto;
+  line-height: 1.5;
 }
 
 .deployments-table thead {
   background: #000000;
-  border-bottom: 2px solid #16a34a;
+  border-bottom: 2px solid rgba(22, 163, 74, 0.4);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -503,13 +691,22 @@
 }
 
 .deployments-table td {
-  padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid #16a34a;
-  border-right: 1px solid #16a34a;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid rgba(22, 163, 74, 0.3);
+  border-right: 1px solid rgba(22, 163, 74, 0.2);
   color: #16a34a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.deployments-table tbody tr.runner-highlight {
+  background: rgba(22, 163, 74, 0.05);
+  border-left: 2px solid rgba(22, 163, 74, 0.5);
+}
+
+.deployments-table tbody tr.runner-highlight:hover {
+  background: rgba(22, 163, 74, 0.1);
 }
 
 .deployments-table td:last-child {
@@ -526,9 +723,14 @@
 
 /* Table Cell Styles */
 .token-name-cell {
-  font-weight: 500;
-  min-width: 100px;
-  max-width: 150px;
+  font-weight: 600;
+  min-width: 120px;
+  max-width: 180px;
+  font-size: 0.95rem;
+}
+
+.token-name-cell strong {
+  font-size: 1rem;
 }
 
 .address-cell {
