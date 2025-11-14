@@ -4,37 +4,15 @@ import { formatUnits } from 'viem';
 import TokenFeed from './components/TokenFeed';
 import WalletConnect from './components/WalletConnect';
 import { FEYSCAN_TOKEN_ADDRESS, REQUIRED_BALANCE, isWhitelisted } from './components/WalletConnect';
+import { getAllDeployments, getLatestDeployment, supabase } from './config/supabase.js';
 import './App.css';
 import feyLogo from '/FeyScanner.jpg';
-
-// Detect environment and use appropriate API URL
-const getApiUrl = () => {
-  // If we have an explicit API URL in env, use it
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-
-  // If on Vercel (or production), use relative API path
-  if (import.meta.env.PROD || window.location.hostname.includes('vercel.app')) {
-    return '/api';
-  }
-
-  // If accessing through ngrok, use the same host for API
-  if (window.location.hostname.includes('ngrok')) {
-    return `${window.location.protocol}//${window.location.hostname}/api`;
-  }
-
-  // Default to localhost for local development
-  return 'http://localhost:3001';
-};
-
-const API_URL = getApiUrl();
 
 function App() {
   const [deployments, setDeployments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [serverStatus, setServerStatus] = useState('checking');
+  const [dbStatus, setDbStatus] = useState('checking');
   const { address, isConnected } = useAccount();
 
   // Wagmi automatically handles account changes - no manual listeners needed
@@ -55,43 +33,43 @@ function App() {
 
   const fetchDeployments = async () => {
     try {
-      // Use relative URL if on production/Vercel or ngrok, otherwise use full API_URL
-      const apiEndpoint = (import.meta.env.PROD || window.location.hostname.includes('ngrok') || window.location.hostname.includes('vercel.app'))
-        ? '/api/deployments'
-        : `${API_URL}/api/deployments`;
-
-      const response = await fetch(apiEndpoint);
-      if (!response.ok) {
-        throw new Error('Failed to fetch deployments');
+      if (!supabase) {
+        throw new Error('Supabase not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
       }
-      const data = await response.json();
-      const deployments = data.deployments || [];
+      
+      const deployments = await getAllDeployments();
       setDeployments(deployments);
       setError(null);
-      setServerStatus('online');
+      setDbStatus('online');
     } catch (err) {
-      console.error('Error fetching deployments:', err);
+      console.error('Error fetching deployments from Supabase:', err);
       setError(err.message);
-      setServerStatus('offline');
+      setDbStatus('offline');
     } finally {
       setLoading(false);
     }
   };
 
-  const checkServerHealth = async () => {
+  const checkDbHealth = async () => {
     try {
-      const healthEndpoint = (import.meta.env.PROD || window.location.hostname.includes('ngrok') || window.location.hostname.includes('vercel.app'))
-        ? '/api/health'
-        : `${API_URL}/api/health`;
-
-      const response = await fetch(healthEndpoint, { signal: AbortSignal.timeout(5000) });
-      if (response.ok) {
-        setServerStatus('online');
+      if (!supabase) {
+        setDbStatus('offline');
+        return;
+      }
+      
+      // Simple query to check connection
+      const { error } = await supabase
+        .from('deployments')
+        .select('tx_hash')
+        .limit(1);
+      
+      if (error) {
+        setDbStatus('offline');
       } else {
-        setServerStatus('offline');
+        setDbStatus('online');
       }
     } catch (err) {
-      setServerStatus('offline');
+      setDbStatus('offline');
     }
   };
 
@@ -101,8 +79,8 @@ function App() {
       Notification.requestPermission();
     }
 
-    // Check server health
-    checkServerHealth();
+    // Check database health
+    checkDbHealth();
 
     // Initial fetch
     fetchDeployments();
@@ -114,7 +92,7 @@ function App() {
 
     // Check health every 30 seconds
     const healthInterval = setInterval(() => {
-      checkServerHealth();
+      checkDbHealth();
     }, 30000);
 
     return () => {
@@ -131,9 +109,9 @@ function App() {
                   <div className="title-row">
                     <img src={feyLogo} alt="Fey Scanner" className="fey-logo" />
                     <h1>Fey Token Launchpad Monitor</h1>
-                    <div className={`status-indicator ${serverStatus}`} title={serverStatus === 'online' ? 'Server Online' : 'Server Offline'}>
+                    <div className={`status-indicator ${dbStatus}`} title={dbStatus === 'online' ? 'Database Online' : 'Database Offline'}>
                       <span className="status-dot"></span>
-                      <span className="status-text">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Offline' : 'Checking...'}</span>
+                      <span className="status-text">{dbStatus === 'online' ? 'Online' : dbStatus === 'offline' ? 'Offline' : 'Checking...'}</span>
                     </div>
                     <div className="wallet-connect-wrapper">
                       <WalletConnect />
@@ -181,7 +159,7 @@ function App() {
         {loading && <div className="loading">Loading deployments...</div>}
         {error && <div className="error">Error: {error}</div>}
         {!loading && !error && (
-          <TokenFeed deployments={deployments} serverStatus={serverStatus} hasEnoughTokens={hasAccess} />
+          <TokenFeed deployments={deployments} serverStatus={dbStatus} hasEnoughTokens={hasAccess} />
         )}
       </main>
 
