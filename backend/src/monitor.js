@@ -175,26 +175,31 @@ async function checkForNewDeployments() {
 
   try {
     const currentBlock = await provider.getBlockNumber();
-    const fromBlock = lastCheckedBlock ? lastCheckedBlock + 1 : currentBlock - 10;
+    const fromBlock = lastCheckedBlock ? lastCheckedBlock + 1 : currentBlock - 50; // Check more blocks initially
     const toBlock = currentBlock;
 
     if (fromBlock > toBlock) {
       return; // No new blocks
     }
 
-    // Limit to 10 blocks max (Alchemy free tier)
-    const MAX_BLOCK_RANGE = 10;
+    // PRIORITY: Check TokenCreated events FIRST (most accurate and fastest)
+    // This should catch all new deployments immediately
+    console.log(`\n🔍 PRIORITY: Checking for new deployments in blocks ${fromBlock}-${toBlock}...`);
+    await checkTokenCreatedEvents(fromBlock, toBlock);
+
+    // Also check transactions as backup (in case events are missed)
+    // Paid plan allows larger ranges, but keep it reasonable for speed
+    const MAX_BLOCK_RANGE = 2000; // Paid plan allows up to 10k
     const actualToBlock = Math.min(fromBlock + MAX_BLOCK_RANGE - 1, toBlock);
 
-    if (fromBlock > actualToBlock) {
-      return;
-    }
+    if (fromBlock <= actualToBlock) {
+      // Use the same transaction fetching function that respects limits
+      const transactions = await getTransactionsInRange(fromBlock, actualToBlock);
+      console.log(`  📋 Also checking ${transactions.length} transactions as backup...`);
 
-    // Use the same transaction fetching function that respects limits
-    const transactions = await getTransactionsInRange(fromBlock, actualToBlock);
-
-    for (const tx of transactions) {
-      await processTransaction(tx);
+      for (const tx of transactions) {
+        await processTransaction(tx);
+      }
     }
 
     // Check for dev sells (periodically, ~20% of cycles)
@@ -205,9 +210,6 @@ async function checkForNewDeployments() {
 
     // Update holder counts more frequently (every cycle now for better tracking)
     await updateHolderCounts();
-
-    // Also monitor TokenCreated events from Factory contract (more accurate)
-    await checkTokenCreatedEvents(fromBlock, actualToBlock);
 
     // Update last checked block and save state
     lastCheckedBlock = actualToBlock;
@@ -238,11 +240,55 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
     const tokenCreatedTopic = ethers.id('TokenCreated(address,address,address,string,string,string,string,string,address,bytes32,int24,address,address,address,uint256,address[])');
 
     // Get logs in chunks (paid plan allows larger ranges)
+    // PRIORITY: Check recent blocks first (last 100 blocks) for immediate detection
+    const RECENT_BLOCK_RANGE = 100;
     const MAX_BLOCK_RANGE = 2000; // Paid plan allows up to 10k blocks
     let foundCount = 0;
     
-    // If range is small, check in one go
-    if (toBlock - fromBlock <= MAX_BLOCK_RANGE) {
+    // PRIORITY: Check most recent blocks first for immediate detection
+    const recentFromBlock = Math.max(fromBlock, toBlock - RECENT_BLOCK_RANGE);
+    if (recentFromBlock <= toBlock) {
+      try {
+        const recentLogs = await provider.getLogs({
+          address: CONTRACT_ADDRESS,
+          fromBlock: recentFromBlock,
+          toBlock: toBlock,
+          topics: [tokenCreatedTopic]
+        });
+        
+        console.log(`  🔍 PRIORITY: Checking recent blocks ${recentFromBlock}-${toBlock}: found ${recentLogs.length} TokenCreated events`);
+        
+        for (const log of recentLogs) {
+          try {
+            if (log.topics && log.topics.length >= 4) {
+              const tokenAddress = '0x' + log.topics[2].slice(-40);
+              
+              // Get transaction and receipt for additional data
+              const tx = await provider.getTransaction(log.transactionHash);
+              const receipt = await provider.getTransactionReceipt(log.transactionHash);
+              
+              // Check if we already have this deployment
+              const existing = await getAllDeployments();
+              if (existing.some(d => d.txHash === log.transactionHash || d.tokenAddress?.toLowerCase() === tokenAddress.toLowerCase())) {
+                continue; // Already processed
+              }
+              
+              // Extract and store immediately
+              await extractAndStoreDeployment(tx, receipt, tokenAddress);
+              foundCount++;
+              console.log(`  ✅ NEW DEPLOYMENT DETECTED: ${tokenAddress} (tx: ${log.transactionHash})`);
+            }
+          } catch (e) {
+            console.error(`  ⚠️  Error processing TokenCreated event:`, e.message);
+          }
+        }
+      } catch (e) {
+        console.error(`  ⚠️  Error checking recent TokenCreated events:`, e.message);
+      }
+    }
+    
+    // Then check older blocks if needed (for backfilling)
+    if (fromBlock < recentFromBlock && toBlock - fromBlock <= MAX_BLOCK_RANGE) {
       try {
         const logs = await provider.getLogs({
           address: CONTRACT_ADDRESS,
