@@ -34,6 +34,12 @@ function dbToDeployment(row) {
     volume24h: parseFloat(row.volume_24h) || 0,
     volume7d: parseFloat(row.volume_7d) || 0,
     volumeHistory: row.volume_history || [],
+    marketCap: parseFloat(row.market_cap) || 0,
+    devTransferCount: row.dev_transfer_count || 0,
+    devTransferredOut: parseFloat(row.dev_transferred_out) || 0,
+    devTransferredIn: parseFloat(row.dev_transferred_in) || 0,
+    devNetTransfer: parseFloat(row.dev_net_transfer) || 0,
+    lastTransferCheck: row.last_transfer_check || null,
     links: row.links || {}
   };
 }

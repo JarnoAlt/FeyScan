@@ -55,6 +55,12 @@ function deploymentToDB(deployment) {
     volume_24h: deployment.volume24h || 0,
     volume_7d: deployment.volume7d || 0,
     volume_history: deployment.volumeHistory || [],
+    market_cap: deployment.marketCap || 0,
+    dev_transfer_count: deployment.devTransferCount || 0,
+    dev_transferred_out: deployment.devTransferredOut || 0,
+    dev_transferred_in: deployment.devTransferredIn || 0,
+    dev_net_transfer: deployment.devNetTransfer || 0,
+    last_transfer_check: deployment.lastTransferCheck || null,
     is_pruned: deployment.isPruned || false,
     links: deployment.links || {}
   };
@@ -82,6 +88,12 @@ function dbToDeployment(row) {
     volume24h: parseFloat(row.volume_24h) || 0,
     volume7d: parseFloat(row.volume_7d) || 0,
     volumeHistory: row.volume_history || [],
+    marketCap: parseFloat(row.market_cap) || 0,
+    devTransferCount: row.dev_transfer_count || 0,
+    devTransferredOut: parseFloat(row.dev_transferred_out) || 0,
+    devTransferredIn: parseFloat(row.dev_transferred_in) || 0,
+    devNetTransfer: parseFloat(row.dev_net_transfer) || 0,
+    lastTransferCheck: row.last_transfer_check || null,
     isPruned: row.is_pruned || false,
     links: row.links || {}
   };
@@ -212,6 +224,12 @@ export async function updateDeployment(txHash, updates) {
     if (updates.volume24h !== undefined) dbUpdates.volume_24h = updates.volume24h;
     if (updates.volume7d !== undefined) dbUpdates.volume_7d = updates.volume7d;
     if (updates.volumeHistory !== undefined) dbUpdates.volume_history = updates.volumeHistory;
+    if (updates.marketCap !== undefined) dbUpdates.market_cap = updates.marketCap;
+    if (updates.devTransferCount !== undefined) dbUpdates.dev_transfer_count = updates.devTransferCount;
+    if (updates.devTransferredOut !== undefined) dbUpdates.dev_transferred_out = updates.devTransferredOut;
+    if (updates.devTransferredIn !== undefined) dbUpdates.dev_transferred_in = updates.devTransferredIn;
+    if (updates.devNetTransfer !== undefined) dbUpdates.dev_net_transfer = updates.devNetTransfer;
+    if (updates.lastTransferCheck !== undefined) dbUpdates.last_transfer_check = updates.lastTransferCheck;
     if (updates.isPruned !== undefined) dbUpdates.is_pruned = updates.isPruned;
 
     const { error } = await supabase

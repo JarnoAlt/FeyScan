@@ -91,6 +91,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
   const [isMuted, setIsMuted] = useState(false);
   const [serverStatus, setServerStatus] = useState('checking');
   const [notifiedAboutMissingAlerts, setNotifiedAboutMissingAlerts] = useState(new Set());
+  const [showScoreHelp, setShowScoreHelp] = useState(false);
 
   // Sync mute state with parent
   const handleMuteToggle = () => {
@@ -116,6 +117,72 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
     if (volume >= 0.01) return `${volume.toFixed(3)} ETH`;
     return `<0.01 ETH`;
   };
+
+  const formatMarketCap = (mcap) => {
+    if (!mcap || mcap === 0) return '-';
+    if (mcap >= 1000000) return `$${(mcap / 1000000).toFixed(2)}M`;
+    if (mcap >= 1000) return `$${(mcap / 1000).toFixed(2)}K`;
+    return `$${mcap.toFixed(2)}`;
+  };
+
+  // Score Help Modal Component
+  const ScoreHelpModal = () => (
+    <div className="modal-overlay" onClick={() => setShowScoreHelp(false)}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Runner Score Calculation</h2>
+          <button className="modal-close" onClick={() => setShowScoreHelp(false)}>×</button>
+        </div>
+        <div className="modal-body">
+          <p>The <strong>Runner Score</strong> identifies tokens with high activity and growth potential.</p>
+
+          <h3>Formula</h3>
+          <div className="score-formula">
+            <code>
+              Score = (Volume 24h × 0.4) + (Growth % × 0.4) + (Absolute Growth × 0.2)
+            </code>
+          </div>
+
+          <h3>Components</h3>
+          <ul>
+            <li>
+              <strong>Volume 24h (40% weight):</strong> Trading volume in ETH over the last 24 hours.
+              Higher volume indicates more market activity.
+            </li>
+            <li>
+              <strong>Growth % (40% weight):</strong> Percentage increase in holder count.
+              Normalized: 10% growth = 1.0 point, capped at 100% growth = 10 points.
+              Formula: <code>(Current Holders - Previous Holders) / Previous Holders × 100</code>
+            </li>
+            <li>
+              <strong>Absolute Growth (20% weight):</strong> Raw number of new holders added.
+              Capped at 50 holders = 10 points.
+              Formula: <code>Current Holders - Previous Holders</code>
+            </li>
+          </ul>
+
+          <h3>Score Interpretation</h3>
+          <ul>
+            <li><strong>0.0 - 0.2:</strong> Low activity</li>
+            <li><strong>0.2 - 0.5:</strong> Moderate activity</li>
+            <li><strong>0.5 - 1.0:</strong> High activity</li>
+            <li><strong>1.0+:</strong> Very high activity (Hot Runner)</li>
+          </ul>
+
+          <h3>Example</h3>
+          <p>
+            A token with 0.5 ETH volume, 25% holder growth (from 20 to 25 holders),
+            and 5 new holders would score:
+          </p>
+          <div className="score-formula">
+            <code>
+              (0.5 × 0.4) + (2.5 × 0.4) + (5 × 0.2) = 0.2 + 1.0 + 1.0 = <strong>2.2</strong>
+            </code>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   // Calculate runner score: combines volume, holder growth %, and absolute growth
   const calculateRunnerScore = (deployment) => {
@@ -399,6 +466,10 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
         case 'volume24h':
           aVal = a.volume24h || 0;
           bVal = b.volume24h || 0;
+          break;
+        case 'marketCap':
+          aVal = a.marketCap || 0;
+          bVal = b.marketCap || 0;
           break;
         case 'runnerScore':
           aVal = a.runnerData?.score || 0;
@@ -706,7 +777,22 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                     <th>Holders</th>
                     <th>Growth</th>
                     <th>Volume 24h</th>
-                    <th>Score</th>
+                    <th className="sortable" onClick={() => handleSort('marketCap')}>
+                      MCAP <SortArrow field="marketCap" />
+                    </th>
+                    <th>
+                      Score
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowScoreHelp(true);
+                        }}
+                        title="How is the score calculated?"
+                      >
+                        ?
+                      </button>
+                    </th>
                     <th>Links</th>
                   </tr>
                 </thead>
@@ -755,6 +841,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                         <td className="volume-cell">
                           {formatVolume(runner.runnerData.volume24h)}
                           {runner.runnerData.volume24h > 0.1 && <span className="volume-badge">💰</span>}
+                        </td>
+                        <td className="mcap-cell">
+                          {formatMarketCap(runner.marketCap)}
                         </td>
                         <td className="score-cell">
                           <span className={`runner-score ${runner.runnerData.score > 0.5 ? 'high' : runner.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
@@ -823,6 +912,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                     <th className="sortable" onClick={() => handleSort('volume24h')}>
                       Volume 24h <SortArrow field="volume24h" />
                     </th>
+                    <th className="sortable" onClick={() => handleSort('marketCap')}>
+                      MCAP <SortArrow field="marketCap" />
+                    </th>
                     <th className="sortable" onClick={() => handleSort('timestamp')}>
                       Age <SortArrow field="timestamp" />
                     </th>
@@ -881,22 +973,8 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                         <td className="volume-cell">
                           {formatVolume(deployment.volume24h)}
                         </td>
-                        <td className="score-cell">
-                          {deployment.runnerData && (
-                            <span className={`runner-score ${deployment.runnerData.score > 0.5 ? 'high' : deployment.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
-                              {deployment.runnerData.score.toFixed(2)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="dev-buy-cell">
-                          <div className="dev-buy-content">
-                            {deployment.devBuyAmountFormatted || `${deployment.devBuyAmount || 0} ETH`}
-                            {deployment.devSold && (
-                              <span className="dev-sold-badge" title={`Dev sold ${deployment.devSoldAmount?.toFixed(4) || 'tokens'}`}>
-                                SOLD
-                              </span>
-                            )}
-                          </div>
+                        <td className="mcap-cell">
+                          {formatMarketCap(deployment.marketCap)}
                         </td>
                         <td className="time-cell">
                           <LiveTime timestamp={deployment.timestamp} />
@@ -950,8 +1028,22 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                     <th className="sortable" onClick={() => handleSort('volume24h')}>
                       Volume 24h <SortArrow field="volume24h" />
                     </th>
+                    <th className="sortable" onClick={() => handleSort('marketCap')}>
+                      MCAP <SortArrow field="marketCap" />
+                    </th>
                     <th className="sortable" onClick={() => handleSort('runnerScore')}>
-                      Score <SortArrow field="runnerScore" />
+                      Score
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowScoreHelp(true);
+                        }}
+                        title="How is the score calculated?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="runnerScore" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('devBuyAmount')}>
                       Dev Buy <SortArrow field="devBuyAmount" />
@@ -1014,6 +1106,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                         <td className="volume-cell">
                           {formatVolume(deployment.volume24h)}
                         </td>
+                        <td className="mcap-cell">
+                          {formatMarketCap(deployment.marketCap)}
+                        </td>
                         <td className="score-cell">
                           {deployment.runnerData && (
                             <span className={`runner-score ${deployment.runnerData.score > 0.5 ? 'high' : deployment.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
@@ -1057,6 +1152,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
         )}
       </div>
       </div>
+
+      {/* Score Help Modal */}
+      {showScoreHelp && <ScoreHelpModal />}
     </div>
   );
 }

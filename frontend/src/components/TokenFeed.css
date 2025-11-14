@@ -866,6 +866,59 @@
   max-width: 130px;
 }
 
+.mcap-cell {
+  padding: 0.5rem;
+  text-align: right;
+  color: #3b82f6;
+  font-weight: 500;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  min-width: 90px;
+  max-width: 130px;
+}
+
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  border-radius: 50%;
+  border: 1px solid #16a34a;
+  background: transparent;
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: all 0.2s;
+  padding: 0;
+  line-height: 1;
+}
+
+.help-icon:hover {
+  background: #16a34a;
+  color: #000;
+  transform: scale(1.1);
+}
+
+.score-formula {
+  background: #1a1a1a;
+  border: 1px solid #16a34a;
+  border-radius: 4px;
+  padding: 1rem;
+  margin: 1rem 0;
+  font-family: 'Courier New', monospace;
+}
+
+.score-formula code {
+  font-size: 1rem;
+  color: #16a34a;
+  display: block;
+  white-space: pre-wrap;
+}
+
 .holder-trend {
   font-size: 0.875rem;
   font-weight: 700;
