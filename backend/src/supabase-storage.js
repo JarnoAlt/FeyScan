@@ -14,10 +14,23 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVI
 let supabase = null;
 
 if (SUPABASE_URL && SUPABASE_KEY) {
-  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  console.log('✅ Supabase client initialized');
+  try {
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log('✅ Supabase client initialized');
+    console.log(`   URL: ${SUPABASE_URL.substring(0, 30)}...`);
+    console.log(`   Key: ${SUPABASE_KEY.substring(0, 20)}...`);
+  } catch (error) {
+    console.error('❌ Error initializing Supabase client:', error.message);
+    console.log('⚠️  Falling back to JSON file storage');
+  }
 } else {
   console.log('⚠️  Supabase not configured - using JSON file storage');
+  if (!SUPABASE_URL) {
+    console.log('   Missing: SUPABASE_URL');
+  }
+  if (!SUPABASE_KEY) {
+    console.log('   Missing: SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY');
+  }
 }
 
 /**
