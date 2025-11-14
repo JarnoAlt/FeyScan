@@ -14,6 +14,8 @@ function App() {
   const [error, setError] = useState(null);
   const [dbStatus, setDbStatus] = useState('checking');
   const [showAbout, setShowAbout] = useState(false);
+  const [seenDeployments, setSeenDeployments] = useState(new Set());
+  const [isMuted, setIsMuted] = useState(false);
   const { address, isConnected } = useAccount();
 
   // Wagmi automatically handles account changes - no manual listeners needed
@@ -32,14 +34,75 @@ function App() {
   const hasEnoughTokens = tokenBalance && tokenBalance.value >= REQUIRED_BALANCE;
   const hasAccess = isWhitelistedDev || hasEnoughTokens;
 
+  const playDeploymentSound = () => {
+    if (isMuted) return;
+
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Play a distinctive "new deployment" sound - ascending chime
+      const playTone = (frequency, startTime, duration, volume = 0.3) => {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = frequency;
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.05);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      };
+
+      // Play ascending three-tone chime for new deployment
+      const baseTime = audioContext.currentTime;
+      playTone(600, baseTime, 0.2, 0.3);
+      playTone(800, baseTime + 0.1, 0.2, 0.35);
+      playTone(1000, baseTime + 0.2, 0.3, 0.4);
+    } catch (e) {
+      // Fallback: browser notification if audio fails
+      if (Notification.permission === 'granted') {
+        new Notification('🚀 New Token Deployment', {
+          body: 'A new token has been deployed!',
+          icon: '🚀'
+        });
+      }
+    }
+  };
+
   const fetchDeployments = async () => {
     try {
       if (!supabase) {
         throw new Error('Supabase not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
       }
 
-      const deployments = await getAllDeployments();
-      setDeployments(deployments);
+      const newDeployments = await getAllDeployments();
+
+      // Check for new deployments (not seen before)
+      if (seenDeployments.size > 0 && newDeployments.length > 0) {
+        newDeployments.forEach(deployment => {
+          if (deployment.txHash && !seenDeployments.has(deployment.txHash)) {
+            // New deployment detected!
+            playDeploymentSound();
+          }
+        });
+      }
+
+      // Update seen deployments
+      const newSeenSet = new Set(seenDeployments);
+      newDeployments.forEach(deployment => {
+        if (deployment.txHash) {
+          newSeenSet.add(deployment.txHash);
+        }
+      });
+      setSeenDeployments(newSeenSet);
+
+      setDeployments(newDeployments);
       setError(null);
       setDbStatus('online');
     } catch (err) {
@@ -205,6 +268,16 @@ function App() {
                   <span className="link-icon">🔗</span>
                   <span>Farcaster</span>
                 </a>
+                <a
+                  href="https://x.com/FeyScan"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="donation-link twitter-link"
+                  title="Follow on X (Twitter)"
+                >
+                  <span className="link-icon">🔗</span>
+                  <span>X (Twitter)</span>
+                </a>
                 <button
                   className="donation-link about-link"
                   onClick={() => setShowAbout(true)}
@@ -223,7 +296,13 @@ function App() {
         {loading && <div className="loading">Loading deployments...</div>}
         {error && <div className="error">Error: {error}</div>}
         {!loading && !error && (
-          <TokenFeed deployments={deployments} serverStatus={dbStatus} hasEnoughTokens={hasEnoughTokens} hasAccess={hasAccess} />
+          <TokenFeed
+            deployments={deployments}
+            serverStatus={dbStatus}
+            hasEnoughTokens={hasEnoughTokens}
+            hasAccess={hasAccess}
+            onMuteChange={setIsMuted}
+          />
         )}
       </main>
 
@@ -273,6 +352,14 @@ function App() {
                   className="modal-link"
                 >
                   🔗 Farcaster (@ionoi)
+                </a>
+                <a
+                  href="https://x.com/FeyScan"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="modal-link"
+                >
+                  🔗 X (Twitter) @FeyScan
                 </a>
                 <a
                   href="https://basescan.org/address/0x8EEF0dC80ADf57908bB1be0236c2a72a7e379C2d"

@@ -79,7 +79,7 @@ function HolderCheckTime({ lastCheckTime }) {
   );
 }
 
-function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false }) {
+function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, onMuteChange }) {
   const [sortField, setSortField] = useState('timestamp');
   const [sortDirection, setSortDirection] = useState('desc');
   const [ensNames, setEnsNames] = useState({});
@@ -91,6 +91,15 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false }) 
   const [isMuted, setIsMuted] = useState(false);
   const [serverStatus, setServerStatus] = useState('checking');
   const [notifiedAboutMissingAlerts, setNotifiedAboutMissingAlerts] = useState(new Set());
+
+  // Sync mute state with parent
+  const handleMuteToggle = () => {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    if (onMuteChange) {
+      onMuteChange(newMuted);
+    }
+  };
 
   const formatTimeAgo = (timestamp) => {
     const now = Math.floor(Date.now() / 1000);
@@ -533,8 +542,8 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false }) 
           <div className="filter-group">
             <button
               className={`mute-button ${isMuted ? 'muted' : ''}`}
-              onClick={() => setIsMuted(!isMuted)}
-              title={isMuted ? 'Unmute alerts' : 'Mute alerts'}
+              onClick={handleMuteToggle}
+              title={isMuted ? 'Unmute all sounds' : 'Mute all sounds'}
             >
               {isMuted ? '🔇 MUTE' : '🔔 MUTE'}
             </button>

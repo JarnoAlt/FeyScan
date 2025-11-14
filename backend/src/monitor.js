@@ -958,7 +958,10 @@ async function updateHolderCounts() {
       // Log top priorities for debugging
       tokensWithPriority.slice(0, 5).forEach((t, i) => {
         if (t.recentVolume > 0) {
-          console.log(`  ${i + 1}. ${t.deployment.tokenName || 'Token'}: ${t.recentVolume} recent transfers, priority: ${t.priority}`);
+          const displayName = t.deployment.tokenName && t.deployment.tokenName !== 'Unknown'
+            ? t.deployment.tokenName
+            : (t.deployment.tokenAddress ? `${t.deployment.tokenAddress.slice(0, 6)}...${t.deployment.tokenAddress.slice(-4)}` : 'Token');
+          console.log(`  ${i + 1}. ${displayName}: ${t.recentVolume} recent transfers, priority: ${t.priority}`);
         }
       });
     }
@@ -1105,6 +1108,30 @@ async function updateHolderCounts() {
 
           // newHolderCount is already set above based on whether we checked all blocks or just recent
 
+          // If token name is still "Unknown", try to fetch it again (token might be ready now)
+          let updatedTokenName = deployment.tokenName;
+          if ((!updatedTokenName || updatedTokenName === 'Unknown') && deployment.tokenAddress && deployment.tokenAddress !== 'N/A') {
+            try {
+              const tokenContract = new ethers.Contract(deployment.tokenAddress, [
+                'function name() view returns (string)',
+                'function symbol() view returns (string)'
+              ], provider);
+
+              try {
+                updatedTokenName = await tokenContract.name();
+              } catch (e) {
+                // Try symbol if name fails
+                try {
+                  updatedTokenName = await tokenContract.symbol();
+                } catch (e2) {
+                  // Keep as Unknown if both fail
+                }
+              }
+            } catch (error) {
+              // Failed to fetch name, keep existing
+            }
+          }
+
           // Update holder count and history
           const history = deployment.holderCountHistory || [{ count: deployment.holderCount || 0, timestamp: deployment.timestamp }];
 
@@ -1120,18 +1147,29 @@ async function updateHolderCounts() {
               newHistory.shift(); // Remove oldest
             }
 
-            await updateDeployment(deployment.txHash, {
+            // Prepare update object
+            const updateData = {
               holderCount: newHolderCount,
               holderCountHistory: newHistory,
               lastHolderCheck: currentTimestamp // Track when we last checked
-            });
+            };
+
+            // Include token name update if we successfully fetched it
+            if (updatedTokenName && updatedTokenName !== 'Unknown' && updatedTokenName !== deployment.tokenName) {
+              updateData.tokenName = updatedTokenName;
+            }
+
+            await updateDeployment(deployment.txHash, updateData);
+
+            // Use updated name for display
+            const displayName = updatedTokenName && updatedTokenName !== 'Unknown' ? updatedTokenName : (deployment.tokenName || 'Token');
 
             if (countChanged) {
               const change = newHolderCount - (deployment.holderCount || 0);
               const changePercent = (deployment.holderCount || 0) > 0 ? ((change / (deployment.holderCount || 1)) * 100).toFixed(1) : '∞';
-              console.log(`  ✅ ${deployment.tokenName || 'Token'}: ${deployment.holderCount || 0} → ${newHolderCount} (${change > 0 ? '+' : ''}${change}, ${changePercent}%)`);
+              console.log(`  ✅ ${displayName}: ${deployment.holderCount || 0} → ${newHolderCount} (${change > 0 ? '+' : ''}${change}, ${changePercent}%)`);
             } else {
-              console.log(`  ✓ ${deployment.tokenName || 'Token'}: ${newHolderCount} holders (no change)`);
+              console.log(`  ✓ ${displayName}: ${newHolderCount} holders (no change)`);
             }
           } else {
             // Still update lastHolderCheck even if count didn't change
