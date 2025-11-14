@@ -16,6 +16,7 @@ function App() {
   const [dbStatus, setDbStatus] = useState('checking');
   const [isFarcasterContext, setIsFarcasterContext] = useState(false);
   const [farcasterAddress, setFarcasterAddress] = useState(null);
+  const [showAbout, setShowAbout] = useState(false);
   const { address, isConnected } = useAccount();
 
   // Wagmi automatically handles account changes - no manual listeners needed
@@ -81,29 +82,6 @@ function App() {
   };
 
   useEffect(() => {
-    // CRITICAL: Call ready() immediately - this must happen ASAP to dismiss splash screen
-    (async () => {
-      try {
-        await sdk.actions.ready();
-        console.log('✅ SDK ready() called - splash screen should dismiss');
-        setIsFarcasterContext(true);
-
-        // Try to get wallet address from Farcaster SDK
-        try {
-          const wallet = await sdk.actions.getEthereumWallet();
-          if (wallet && wallet.address) {
-            setFarcasterAddress(wallet.address);
-            console.log('✅ Farcaster wallet address:', wallet.address);
-          }
-        } catch (e) {
-          console.log('Could not get Farcaster wallet (may need user approval):', e.message);
-        }
-      } catch (e) {
-        // If ready() fails, we're not in Farcaster context - this is fine for web
-        console.log('Not in Farcaster context (normal for web):', e.message);
-      }
-    })();
-
     // Request notification permission
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
@@ -143,25 +121,9 @@ function App() {
                       <span className="status-dot"></span>
                       <span className="status-text">{dbStatus === 'online' ? 'Online' : dbStatus === 'offline' ? 'Offline' : 'Checking...'}</span>
                     </div>
-                    {!isFarcasterContext && (
-                      <div className="wallet-connect-wrapper">
-                        <WalletConnect />
-                      </div>
-                    )}
-                    {isFarcasterContext && farcasterAddress && (
-                      <div className="wallet-info-container">
-                        <div className="wallet-address-display">
-                          <span className="wallet-address-text">
-                            {farcasterAddress ? `${farcasterAddress.slice(0, 6)}...${farcasterAddress.slice(-4)}` : 'Not connected'}
-                          </span>
-                          {hasAccess && (
-                            <span className="token-badge" title={isWhitelistedDev ? 'Dev Access' : 'Farcaster Wallet'}>
-                              {isWhitelistedDev ? '✓ Dev' : '✓ Farcaster'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                    <div className="wallet-connect-wrapper">
+                      <WalletConnect />
+                    </div>
                   </div>
             <p className="subtitle">Live monitoring of token deployments on Base Network</p>
             <p className="token-address">
@@ -196,6 +158,36 @@ function App() {
                   📋
                 </button>
               </div>
+              <div className="donation-links">
+                <a
+                  href="https://github.com/dutchiono/FeyScan"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="donation-link github-link"
+                  title="View on GitHub"
+                >
+                  <span className="link-icon">🔗</span>
+                  <span>GitHub</span>
+                </a>
+                <a
+                  href="https://warpcast.com/ionoi"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="donation-link farcaster-link"
+                  title="Follow on Farcaster"
+                >
+                  <span className="link-icon">🔗</span>
+                  <span>Farcaster</span>
+                </a>
+                <button
+                  className="donation-link about-link"
+                  onClick={() => setShowAbout(true)}
+                  title="About FeyScan"
+                >
+                  <span className="link-icon">ℹ️</span>
+                  <span>About</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -208,6 +200,75 @@ function App() {
           <TokenFeed deployments={deployments} serverStatus={dbStatus} hasEnoughTokens={hasAccess} />
         )}
       </main>
+
+      {/* About Modal */}
+      {showAbout && (
+        <div className="modal-overlay" onClick={() => setShowAbout(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>About FeyScan</h2>
+              <button className="modal-close" onClick={() => setShowAbout(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p>
+                <strong>FeyScan</strong> is a real-time monitoring dashboard for token deployments on the Fey launchpad on Base Network.
+              </p>
+              <h3>Features</h3>
+              <ul>
+                <li>Live token deployment tracking</li>
+                <li>Holder count monitoring with trend indicators</li>
+                <li>Dev buy alerts (notifications for high dev buys &gt; 0.25 ETH)</li>
+                <li>Priority-based holder checking (focuses on high-volume tokens)</li>
+                <li>Advanced filtering (hide zero dev buys, remove duplicates, filter serial deployers)</li>
+                <li>Token gating (requires 10M FeyScan tokens for premium features)</li>
+              </ul>
+              <h3>Tech Stack</h3>
+              <ul>
+                <li><strong>Frontend:</strong> React + Vite</li>
+                <li><strong>Backend:</strong> Node.js + Express</li>
+                <li><strong>Database:</strong> Supabase (PostgreSQL)</li>
+                <li><strong>Blockchain:</strong> ethers.js (Base Network)</li>
+                <li><strong>RPC Providers:</strong> Alchemy, Infura</li>
+              </ul>
+              <h3>Links</h3>
+              <div className="modal-links">
+                <a
+                  href="https://github.com/dutchiono/FeyScan"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="modal-link"
+                >
+                  🔗 GitHub Repository
+                </a>
+                <a
+                  href="https://warpcast.com/ionoi"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="modal-link"
+                >
+                  🔗 Farcaster (@ionoi)
+                </a>
+                <a
+                  href="https://basescan.org/address/0x8EEF0dC80ADf57908bB1be0236c2a72a7e379C2d"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="modal-link"
+                >
+                  🔗 Fey Launcher Contract
+                </a>
+                <a
+                  href="https://basescan.org/address/0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="modal-link"
+                >
+                  🔗 FeyScan Token
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="App-footer">
         <div className="footer-content">
