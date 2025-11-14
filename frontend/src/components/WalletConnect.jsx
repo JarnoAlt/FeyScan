@@ -1,13 +1,36 @@
 import { useAccount, useConnect, useDisconnect, useBalance } from 'wagmi';
 import { formatUnits } from 'viem';
+import { useEffect } from 'react';
 
 const FEYSCAN_TOKEN_ADDRESS = '0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659';
 const REQUIRED_BALANCE = 10000000n; // 10 million tokens
 
 function WalletConnect() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
+  
+  // Listen for account changes in MetaMask
+  useEffect(() => {
+    if (!window.ethereum) return;
+    
+    const handleAccountsChanged = (accounts) => {
+      if (accounts.length === 0) {
+        // User disconnected
+        disconnect();
+      } else {
+        // Account changed - wagmi should pick this up automatically
+        // Force a reconnect to update the address
+        window.location.reload();
+      }
+    };
+    
+    window.ethereum.on('accountsChanged', handleAccountsChanged);
+    
+    return () => {
+      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+    };
+  }, [disconnect]);
 
   // Get token balance
   const { data: tokenBalance, isLoading: balanceLoading } = useBalance({
