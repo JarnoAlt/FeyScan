@@ -811,9 +811,9 @@ async function updateHolderCounts() {
       return { deployment, priority, lastCheck, recentVolume };
     });
 
-    // Sort by priority (highest first) and take top 3 for this cycle (reduced to avoid rate limits)
+    // Sort by priority (highest first) and take top 5 for this cycle (paid plan allows more)
     tokensWithPriority.sort((a, b) => b.priority - a.priority);
-    const toUpdate = tokensWithPriority.slice(0, 3).map(t => t.deployment);
+    const toUpdate = tokensWithPriority.slice(0, 5).map(t => t.deployment);
 
     // Store volume data for tokens with activity (process sequentially to avoid Supabase rate limits)
     const tokensNeedingVolumeUpdate = tokensWithPriority.filter(t => t.recentVolume > 0);
@@ -861,9 +861,9 @@ async function updateHolderCounts() {
     // Process holder count updates sequentially to avoid rate limits
     // Process one token at a time with delays between them
     for (const deployment of toUpdate) {
-      // Add delay between tokens to avoid rate limits (much longer delays)
+      // Add delay between tokens (reduced with paid plan)
       if (toUpdate.indexOf(deployment) > 0) {
-        await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay between tokens
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay between tokens
       }
 
       await (async () => {
@@ -947,25 +947,24 @@ async function updateHolderCounts() {
               }
 
               consecutiveErrors = 0; // Reset error counter on success
-
-              // Much longer delays between chunks to avoid rate limits
+              
+              // Delays between chunks (reduced with paid plan)
               if (chunkCount > 0) {
-                // Exponential backoff: 1s, 2s, 3s, etc.
-                const delay = Math.min(3000, 1000 + (chunkCount * 200));
-                await new Promise(resolve => setTimeout(resolve, delay));
+                // Small delay between chunks
+                await new Promise(resolve => setTimeout(resolve, 500));
               } else {
-                // Even delay before first chunk
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Small delay before first chunk
+                await new Promise(resolve => setTimeout(resolve, 500));
               }
             } catch (e) {
               consecutiveErrors++;
 
               // If we hit rate limit, stop immediately and wait longer
-              if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('exceeded') || e.message.includes('10 block range'))) {
+              if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('exceeded') || e.message.includes('block range'))) {
                 rateLimitHit = true;
                 console.error(`  ⚠️  Rate limit hit for ${deployment.tokenName || 'token'}, stopping holder check`);
-                // Wait 10 seconds before continuing to next token
-                await new Promise(resolve => setTimeout(resolve, 10000));
+                // Wait 5 seconds before continuing to next token (reduced with paid plan)
+                await new Promise(resolve => setTimeout(resolve, 5000));
                 break;
               }
               console.error(`  ⚠️  Error fetching logs for blocks ${chunkFrom}-${chunkTo}:`, e.message);
