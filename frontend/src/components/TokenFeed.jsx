@@ -643,6 +643,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false }) 
                     <th className="sortable" onClick={() => handleSort('holderCount')}>
                       Holders <SortArrow field="holderCount" />
                     </th>
+                    <th className="sortable" onClick={() => handleSort('volume24h')}>
+                      Volume 24h <SortArrow field="volume24h" />
+                    </th>
                     <th className="sortable" onClick={() => handleSort('timestamp')}>
                       Age <SortArrow field="timestamp" />
                     </th>
