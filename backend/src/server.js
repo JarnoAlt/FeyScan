@@ -43,8 +43,8 @@ app.get('/api/latest', async (req, res) => {
   }
 });
 
-// Farcaster Manifest Route - serve at /api/farcaster-manifest for Vercel
-app.get('/api/farcaster-manifest', (req, res) => {
+// Farcaster Manifest Route - serve at both paths for compatibility
+const serveManifest = (req, res) => {
   // Define manifest directly in code (like badtraders) - don't read from file system
   const manifest = {
     accountAssociation: {
@@ -80,7 +80,10 @@ app.get('/api/farcaster-manifest', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.json(manifest);
-});
+};
+
+// Serve manifest - redirect from vercel.json will route /.well-known/farcaster.json to here
+app.get('/api/farcaster-manifest', serveManifest);
 
 // Health check
 app.get('/api/health', async (req, res) => {

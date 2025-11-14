@@ -19,15 +19,5 @@
       "destination": "/api/farcaster-manifest",
       "permanent": false
     }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "backend/src/server.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend/$1"
-    }
   ]
 }
