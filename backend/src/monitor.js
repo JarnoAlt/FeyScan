@@ -701,12 +701,15 @@ async function updateHolderCounts() {
     const currentBlock = await provider.getBlockNumber();
     const currentTimestamp = Math.floor(Date.now() / 1000);
 
-    // Filter valid tokens (exclude known standard tokens like WETH)
+    // Filter valid tokens (exclude known standard tokens like WETH and FEY)
     const validTokens = deployments.filter(d => {
       if (!d.tokenAddress || d.tokenAddress === 'N/A') return false;
-      // Exclude known standard tokens
+      // Exclude known standard tokens by address
       const addrLower = d.tokenAddress.toLowerCase();
       if (KNOWN_TOKENS.has(addrLower)) return false;
+      // Exclude known tokens by name (case-insensitive)
+      const tokenName = (d.tokenName || '').trim();
+      if (KNOWN_TOKEN_NAMES.has(tokenName.toUpperCase())) return false;
       return true;
     });
 
