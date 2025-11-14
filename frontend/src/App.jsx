@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAccount, useBalance } from 'wagmi';
 import { formatUnits } from 'viem';
-import { sdk } from '@farcaster/miniapp-sdk';
 import TokenFeed from './components/TokenFeed';
 import WalletConnect from './components/WalletConnect';
 import { FEYSCAN_TOKEN_ADDRESS, REQUIRED_BALANCE, isWhitelisted } from './components/WalletConnect';
@@ -14,28 +13,22 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dbStatus, setDbStatus] = useState('checking');
-  const [isFarcasterContext, setIsFarcasterContext] = useState(false);
-  const [farcasterAddress, setFarcasterAddress] = useState(null);
   const [showAbout, setShowAbout] = useState(false);
   const { address, isConnected } = useAccount();
 
   // Wagmi automatically handles account changes - no manual listeners needed
 
-  // Use Farcaster address if in mini app context, otherwise use wagmi address
-  const activeAddress = isFarcasterContext ? farcasterAddress : address;
-  const activeIsConnected = isFarcasterContext ? !!farcasterAddress : isConnected;
-
-  // Check token balance for gating - only if not in Farcaster context (Farcaster has its own wallet)
+  // Check token balance for gating
   const { data: tokenBalance } = useBalance({
-    address: activeAddress,
+    address: address,
     token: FEYSCAN_TOKEN_ADDRESS,
     chainId: 8453, // Base mainnet
     query: {
-      enabled: !isFarcasterContext && activeIsConnected && !!activeAddress,
+      enabled: isConnected && !!address,
     },
   });
 
-  const isWhitelistedDev = activeAddress && isWhitelisted(activeAddress);
+  const isWhitelistedDev = address && isWhitelisted(address);
   const hasEnoughTokens = tokenBalance && tokenBalance.value >= REQUIRED_BALANCE;
   const hasAccess = isWhitelistedDev || hasEnoughTokens;
 
