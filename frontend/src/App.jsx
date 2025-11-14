@@ -3,7 +3,7 @@ import { useAccount, useBalance } from 'wagmi';
 import { formatUnits } from 'viem';
 import TokenFeed from './components/TokenFeed';
 import WalletConnect from './components/WalletConnect';
-import { FEYSCAN_TOKEN_ADDRESS, REQUIRED_BALANCE } from './components/WalletConnect';
+import { FEYSCAN_TOKEN_ADDRESS, REQUIRED_BALANCE, isWhitelisted } from './components/WalletConnect';
 import './App.css';
 import feyLogo from '/FeyScanner.jpg';
 
@@ -49,7 +49,9 @@ function App() {
     },
   });
 
+  const isWhitelistedDev = address && isWhitelisted(address);
   const hasEnoughTokens = tokenBalance && tokenBalance.value >= REQUIRED_BALANCE;
+  const hasAccess = isWhitelistedDev || hasEnoughTokens;
 
   const fetchDeployments = async () => {
     try {
@@ -179,7 +181,7 @@ function App() {
         {loading && <div className="loading">Loading deployments...</div>}
         {error && <div className="error">Error: {error}</div>}
         {!loading && !error && (
-          <TokenFeed deployments={deployments} serverStatus={serverStatus} hasEnoughTokens={hasEnoughTokens} />
+          <TokenFeed deployments={deployments} serverStatus={serverStatus} hasEnoughTokens={hasAccess} />
         )}
       </main>
 

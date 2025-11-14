@@ -5,6 +5,17 @@ import { useEffect } from 'react';
 const FEYSCAN_TOKEN_ADDRESS = '0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659';
 const REQUIRED_BALANCE = 10000000n; // 10 million tokens
 
+// Dev whitelist - these addresses have free access
+const DEV_WHITELIST = [
+  '0x6A111F6a341e7110837FE3eA8e8F426Fc5FA2B32'.toLowerCase(),
+  '0x8DFBdEEC8c5d4970BB5F481C6ec7f73fa1C65be5'.toLowerCase(),
+];
+
+export function isWhitelisted(address) {
+  if (!address) return false;
+  return DEV_WHITELIST.includes(address.toLowerCase());
+}
+
 function WalletConnect() {
   const { address, isConnected, connector } = useAccount();
   const { connect, connectors } = useConnect();
@@ -23,7 +34,9 @@ function WalletConnect() {
     },
   });
 
+  const isWhitelistedDev = address && isWhitelisted(address);
   const hasEnoughTokens = tokenBalance && tokenBalance.value >= REQUIRED_BALANCE;
+  const hasAccess = isWhitelistedDev || hasEnoughTokens;
 
   const handleConnect = () => {
     if (connectors && connectors.length > 0) {
@@ -49,9 +62,9 @@ function WalletConnect() {
         <span className="wallet-address-text">
           {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Not connected'}
         </span>
-        {hasEnoughTokens && (
-          <span className="token-badge" title={`You hold ${tokenBalance ? formatUnits(tokenBalance.value, tokenBalance.decimals) : '0'} FeyScan tokens`}>
-            ✓ Verified
+        {hasAccess && (
+          <span className="token-badge" title={isWhitelistedDev ? 'Dev Access' : `You hold ${tokenBalance ? formatUnits(tokenBalance.value, tokenBalance.decimals) : '0'} FeyScan tokens`}>
+            {isWhitelistedDev ? '✓ Dev' : '✓ Verified'}
           </span>
         )}
       </div>
