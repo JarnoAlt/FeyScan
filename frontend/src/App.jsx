@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import TokenFeed from './components/TokenFeed';
 import './App.css';
+import feyLogo from '/FeyScanner.jpg';
 
 // Detect if we're running through ngrok and use appropriate API URL
 const getApiUrl = () => {
@@ -104,7 +105,7 @@ function App() {
         <div className="header-content">
                 <div className="header-main">
                   <div className="title-row">
-                    <img src="/FeyScanner.jpg" alt="Fey Scanner" className="fey-logo" />
+                    <img src={feyLogo} alt="Fey Scanner" className="fey-logo" />
                     <h1>Fey Token Launchpad Monitor</h1>
                     <div className={`status-indicator ${serverStatus}`} title={serverStatus === 'online' ? 'Server Online' : 'Server Offline'}>
                       <span className="status-dot"></span>
