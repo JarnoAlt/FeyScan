@@ -302,7 +302,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false }) 
 
       setNotifiedAboutMissingAlerts(prev => new Set([...prev, alertKey]));
     }
-  }, [alerts, hasEnoughTokens, isMuted, notifiedAboutMissingAlerts]);
+  }, [alerts, hasAccess, isMuted, notifiedAboutMissingAlerts]);
 
   // Get newest 5 from filtered
   const newest5 = useMemo(() => {
