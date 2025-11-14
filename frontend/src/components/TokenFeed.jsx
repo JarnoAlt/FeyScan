@@ -258,7 +258,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false }) 
         setPlayedAlerts(prev => new Set([...prev, alert.txHash]));
       }
     });
-  }, [alerts, playedAlerts, isMuted, hasEnoughTokens]);
+  }, [alerts, playedAlerts, isMuted, hasAccess]);
 
   // Notify users about missing alerts if they don't have token access
   useEffect(() => {
