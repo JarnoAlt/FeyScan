@@ -223,7 +223,7 @@ function App() {
         {loading && <div className="loading">Loading deployments...</div>}
         {error && <div className="error">Error: {error}</div>}
         {!loading && !error && (
-          <TokenFeed deployments={deployments} serverStatus={dbStatus} hasEnoughTokens={hasAccess} />
+          <TokenFeed deployments={deployments} serverStatus={dbStatus} hasEnoughTokens={hasEnoughTokens} hasAccess={hasAccess} />
         )}
       </main>
 

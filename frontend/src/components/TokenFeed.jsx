@@ -79,7 +79,7 @@ function HolderCheckTime({ lastCheckTime }) {
   );
 }
 
-function TokenFeed({ deployments, hasEnoughTokens = false }) {
+function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false }) {
   const [sortField, setSortField] = useState('timestamp');
   const [sortDirection, setSortDirection] = useState('desc');
   const [ensNames, setEnsNames] = useState({});
@@ -196,7 +196,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
 
   // Play bell sound for new alerts (only if not muted and has token access)
   useEffect(() => {
-    if (isMuted || !hasEnoughTokens) return; // Don't play sound if muted or no token access
+    if (isMuted || !hasAccess) return; // Don't play sound if muted or no token access
 
     alerts.forEach(alert => {
       if (!playedAlerts.has(alert.txHash)) {
@@ -262,7 +262,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
 
   // Notify users about missing alerts if they don't have token access
   useEffect(() => {
-    if (isMuted || hasEnoughTokens || alerts.length === 0) return; // Don't notify if muted, has access, or no alerts
+    if (isMuted || hasAccess || alerts.length === 0) return; // Don't notify if muted, has access, or no alerts
 
     // Create a unique key for this alert set (based on count and newest alert)
     const alertKey = alerts.length > 0
@@ -545,7 +545,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
       <div className="content-wrapper">
         {/* Alerts Sidebar - Token Gated */}
         <div className="alerts-sidebar">
-          {!hasEnoughTokens && (
+          {!hasAccess && (
             <div className="token-gate-message">
               <div className="gate-content">
                 <h2>🔒 Token Gated</h2>
@@ -554,7 +554,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
               </div>
             </div>
           )}
-          {hasEnoughTokens && (
+          {hasAccess && (
             <>
               <div className="alerts-header">
                 <h2>🔔 Alerts</h2>
@@ -607,7 +607,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
       {/* Main Content */}
       <div className="main-content">
         {/* Newest 5 Section - Token Gated */}
-        {!hasEnoughTokens && (
+        {!hasAccess && (
           <div className="token-gate-message">
             <div className="gate-content">
               <h2>🔒 Token Gated Content</h2>
@@ -616,7 +616,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
             </div>
           </div>
         )}
-        {hasEnoughTokens && newest5.length > 0 && (
+        {hasAccess && newest5.length > 0 && (
           <div className="newest-section">
             <div className="section-header">
               <h2>Newest 5 Deployments</h2>
