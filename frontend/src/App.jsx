@@ -36,7 +36,7 @@ function App() {
       if (!supabase) {
         throw new Error('Supabase not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
       }
-      
+
       const deployments = await getAllDeployments();
       setDeployments(deployments);
       setError(null);
@@ -56,13 +56,13 @@ function App() {
         setDbStatus('offline');
         return;
       }
-      
+
       // Simple query to check connection
       const { error } = await supabase
         .from('deployments')
         .select('tx_hash')
         .limit(1);
-      
+
       if (error) {
         setDbStatus('offline');
       } else {

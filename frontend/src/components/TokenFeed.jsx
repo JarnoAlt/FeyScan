@@ -90,6 +90,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
   const [removeSerialDeployers, setRemoveSerialDeployers] = useState(true); // Default ON
   const [isMuted, setIsMuted] = useState(false);
   const [serverStatus, setServerStatus] = useState('checking');
+  const [notifiedAboutMissingAlerts, setNotifiedAboutMissingAlerts] = useState(new Set());
 
   const formatTimeAgo = (timestamp) => {
     const now = Math.floor(Date.now() / 1000);
@@ -186,9 +187,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
       .sort((a, b) => b.timestamp - a.timestamp);
   }, [filteredDeployments]);
 
-  // Play bell sound for new alerts (only if not muted)
+  // Play bell sound for new alerts (only if not muted and has token access)
   useEffect(() => {
-    if (isMuted) return; // Don't play sound if muted
+    if (isMuted || !hasEnoughTokens) return; // Don't play sound if muted or no token access
 
     alerts.forEach(alert => {
       if (!playedAlerts.has(alert.txHash)) {
@@ -250,7 +251,51 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
         setPlayedAlerts(prev => new Set([...prev, alert.txHash]));
       }
     });
-  }, [alerts, playedAlerts, isMuted]);
+  }, [alerts, playedAlerts, isMuted, hasEnoughTokens]);
+
+  // Notify users about missing alerts if they don't have token access
+  useEffect(() => {
+    if (isMuted || hasEnoughTokens || alerts.length === 0) return; // Don't notify if muted, has access, or no alerts
+
+    // Create a unique key for this alert set (based on count and newest alert)
+    const alertKey = alerts.length > 0 
+      ? `${alerts.length}-${alerts[0].txHash}` 
+      : `${alerts.length}`;
+
+    if (!notifiedAboutMissingAlerts.has(alertKey)) {
+      // Play a different sound to indicate they're missing alerts
+      try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Play a lower, more urgent tone to indicate missing content
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = 600; // Lower pitch for "missing something" alert
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.6);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.6);
+      } catch (e) {
+        // Fallback: browser notification
+        if (Notification.permission === 'granted') {
+          new Notification('🔒 Alerts Available', {
+            body: `You're missing ${alerts.length} high-value alert${alerts.length > 1 ? 's' : ''}. Hold 10M FeyScan tokens to view them.`,
+            icon: '🔔'
+          });
+        }
+      }
+
+      setNotifiedAboutMissingAlerts(prev => new Set([...prev, alertKey]));
+    }
+  }, [alerts, hasEnoughTokens, isMuted, notifiedAboutMissingAlerts]);
 
   // Get newest 5 from filtered
   const newest5 = useMemo(() => {
@@ -391,53 +436,66 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
       </div>
 
       <div className="content-wrapper">
-        {/* Alerts Sidebar */}
+        {/* Alerts Sidebar - Token Gated */}
         <div className="alerts-sidebar">
-        <div className="alerts-header">
-          <h2>🔔 Alerts</h2>
-          <span className="alert-count">{alerts.length}</span>
-        </div>
-        <div className="alerts-list">
-          {alerts.length === 0 ? (
-            <div className="no-alerts">No high dev buy alerts</div>
-          ) : (
-            alerts.map((alert, index) => {
-              const ensName = getENSName(alert.from);
-              return (
-                <div key={alert.txHash || index} className="alert-item-compact">
-                  <div className="alert-row-1">
-                    <span className="alert-token-compact">{alert.tokenName || 'Unknown'}</span>
-                    <span className="alert-dev-buy-compact">{alert.devBuyAmountFormatted || `${alert.devBuyAmount} ETH`}</span>
-                  </div>
-                  <div className="alert-row-2">
-                    <span className="alert-dev-compact">
-                      {ensName ? (
-                        <span className="ens-name">{ensName}</span>
-                      ) : (
-                        <code className="alert-address" onClick={() => copyToClipboard(alert.from)} title={alert.from}>
-                          {truncateAddress(alert.from)}
-                        </code>
-                      )}
-                    </span>
-                    <span className="alert-time-compact">{formatTimeAgo(alert.timestamp)}</span>
-                    <div className="alert-links-compact">
-                      {alert.links?.dexscreener && (
-                        <a href={alert.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link" title="DexScreener">DS</a>
-                      )}
-                      {alert.links?.defined && (
-                        <a href={alert.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link" title="Defined.fi">DF</a>
-                      )}
-                      {alert.links?.basescan && (
-                        <a href={alert.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link" title="Basescan">BS</a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
+          {!hasEnoughTokens && (
+            <div className="token-gate-message">
+              <div className="gate-content">
+                <h2>🔒 Token Gated</h2>
+                <p>Hold at least 10,000,000 FeyScan tokens to view alerts.</p>
+                <p className="gate-subtext">Connect your wallet to check your balance.</p>
+              </div>
+            </div>
+          )}
+          {hasEnoughTokens && (
+            <>
+              <div className="alerts-header">
+                <h2>🔔 Alerts</h2>
+                <span className="alert-count">{alerts.length}</span>
+              </div>
+              <div className="alerts-list">
+                {alerts.length === 0 ? (
+                  <div className="no-alerts">No high dev buy alerts</div>
+                ) : (
+                  alerts.map((alert, index) => {
+                    const ensName = getENSName(alert.from);
+                    return (
+                      <div key={alert.txHash || index} className="alert-item-compact">
+                        <div className="alert-row-1">
+                          <span className="alert-token-compact">{alert.tokenName || 'Unknown'}</span>
+                          <span className="alert-dev-buy-compact">{alert.devBuyAmountFormatted || `${alert.devBuyAmount} ETH`}</span>
+                        </div>
+                        <div className="alert-row-2">
+                          <span className="alert-dev-compact">
+                            {ensName ? (
+                              <span className="ens-name">{ensName}</span>
+                            ) : (
+                              <code className="alert-address" onClick={() => copyToClipboard(alert.from)} title={alert.from}>
+                                {truncateAddress(alert.from)}
+                              </code>
+                            )}
+                          </span>
+                          <span className="alert-time-compact">{formatTimeAgo(alert.timestamp)}</span>
+                          <div className="alert-links-compact">
+                            {alert.links?.dexscreener && (
+                              <a href={alert.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link" title="DexScreener">DS</a>
+                            )}
+                            {alert.links?.defined && (
+                              <a href={alert.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link" title="Defined.fi">DF</a>
+                            )}
+                            {alert.links?.basescan && (
+                              <a href={alert.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link" title="Basescan">BS</a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
           )}
         </div>
-      </div>
 
       {/* Main Content */}
       <div className="main-content">
