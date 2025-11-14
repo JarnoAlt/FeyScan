@@ -13,17 +13,14 @@
       }
     }
   ],
-  "redirects": [
+  "routes": [
     {
-      "source": "/.well-known/farcaster.json",
-      "destination": "/api/farcaster-manifest",
-      "permanent": false
-    }
-  ],
-  "rewrites": [
+      "src": "/api/(.*)",
+      "dest": "backend/src/server.js"
+    },
     {
-      "source": "/((?!api).*)",
-      "destination": "/index.html"
+      "src": "/(.*)",
+      "dest": "frontend/$1"
     }
   ]
 }

@@ -43,47 +43,6 @@ app.get('/api/latest', async (req, res) => {
   }
 });
 
-// Farcaster Manifest Route - serve at both paths for compatibility
-const serveManifest = (req, res) => {
-  // Define manifest directly in code (like badtraders) - don't read from file system
-  const manifest = {
-    accountAssociation: {
-      header: "eyJmaWQiOjQ3NDg2NywidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweGQ1OUIyOUNEZGM4NGZjNTNDNzM3NjIzOEUzRjE2QUMzMTI1MTZDNTYifQ",
-      payload: "eyJkb21haW4iOiJmZXlzY2FuLnh5eiJ9",
-      signature: "XguSJ9ttZaIUzF7rpo9Nbnj2NkYqHdSFDkdKV+CZGPp0fjy9v8NJYLUqLOugu0hJxev8CSawC059aR3/xDG1DRs="
-    },
-    miniapp: {
-      version: "1",
-      name: "FeyScan",
-      subtitle: "Token Launchpad Monitor",
-      description: "Live monitoring dashboard for token deployments on the Fey launchpad. Track new token launches, dev buys, holder counts, and more on Base Network.",
-      tagline: "Monitor Fey token deployments in real-time",
-      iconUrl: "https://feyscan.xyz/FeyScanner.jpg",
-      homeUrl: "https://feyscan.xyz",
-      imageUrl: "https://feyscan.xyz/FeyScanner.jpg",
-      heroImageUrl: "https://feyscan.xyz/FeyScanner.jpg",
-      buttonTitle: "Open FeyScan",
-      splashImageUrl: "https://feyscan.xyz/FeyScanner.jpg",
-      splashBackgroundColor: "#000000",
-      primaryCategory: "defi",
-      tags: ["defi", "tokens", "base", "monitoring", "launchpad"],
-      screenshotUrls: ["https://feyscan.xyz/FeyScanner.jpg"],
-      castShareUrl: "https://feyscan.xyz",
-      ogTitle: "FeyScan - Token Launchpad Monitor",
-      ogDescription: "Live monitoring dashboard for token deployments on the Fey launchpad on Base Network.",
-      ogImageUrl: "https://feyscan.xyz/FeyScanner.jpg",
-      webhookUrl: "https://feyscan.xyz/api/webhook"
-    }
-  };
-
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.json(manifest);
-};
-
-// Serve manifest - redirect from vercel.json will route /.well-known/farcaster.json to here
-app.get('/api/farcaster-manifest', serveManifest);
 
 // Health check
 app.get('/api/health', async (req, res) => {
