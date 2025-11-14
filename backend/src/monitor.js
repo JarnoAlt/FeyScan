@@ -5,7 +5,8 @@ import {
   addDeployment,
   getAllDeployments,
   saveMonitorState,
-  loadMonitorState
+  loadMonitorState,
+  updateDeployment
 } from './supabase-storage.js';
 
 // Load environment variables (dotenv for local dev, Vercel provides them automatically)
@@ -810,9 +811,9 @@ async function updateHolderCounts() {
       return { deployment, priority, lastCheck, recentVolume };
     });
 
-    // Sort by priority (highest first) and take top 5 for this cycle (reduced to avoid rate limits)
+    // Sort by priority (highest first) and take top 3 for this cycle (reduced to avoid rate limits)
     tokensWithPriority.sort((a, b) => b.priority - a.priority);
-    const toUpdate = tokensWithPriority.slice(0, 5).map(t => t.deployment);
+    const toUpdate = tokensWithPriority.slice(0, 3).map(t => t.deployment);
 
     // Store volume data for all tokens (not just top 10)
     // Update volume for tokens with activity
@@ -857,11 +858,11 @@ async function updateHolderCounts() {
     // Process holder count updates sequentially to avoid rate limits
     // Process one token at a time with delays between them
     for (const deployment of toUpdate) {
-      // Add delay between tokens to avoid rate limits
+      // Add delay between tokens to avoid rate limits (much longer delays)
       if (toUpdate.indexOf(deployment) > 0) {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay between tokens
+        await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay between tokens
       }
-      
+
       await (async () => {
         try {
           let newHolderCount = 0;
@@ -896,7 +897,7 @@ async function updateHolderCounts() {
           const toBlock = currentBlock;
           const blockRange = toBlock - fromBlock;
           const MAX_BLOCKS_TO_CHECK = 500; // Only check last 500 blocks for old tokens
-          
+
           // Determine starting block: for old tokens, only check recent blocks
           let checkFromBlock = fromBlock;
           if (blockRange > MAX_BLOCKS_TO_CHECK) {
@@ -907,15 +908,16 @@ async function updateHolderCounts() {
             // We can't accurately track all holders with partial data, so we'll use a different approach
             // For now, just check recent blocks and estimate
           }
-          
+
           // Respect RPC limits: Alchemy free tier allows max 10 blocks, use smaller chunks
           const maxBlockRange = 8; // Use 8 blocks to stay under Alchemy's 10-block limit
-          
-          // Limit total chunks to avoid rate limits (max 20 chunks = 160 blocks per token)
-          const maxChunks = Math.min(20, Math.ceil((toBlock - checkFromBlock) / maxBlockRange));
+
+          // Limit total chunks to avoid rate limits (max 10 chunks = 80 blocks per token)
+          const maxChunks = Math.min(10, Math.ceil((toBlock - checkFromBlock) / maxBlockRange));
           let chunkFrom = checkFromBlock;
           let chunkCount = 0;
           let rateLimitHit = false;
+          let consecutiveErrors = 0;
           
           while (chunkFrom < toBlock && chunkCount < maxChunks && !rateLimitHit) {
             const chunkTo = Math.min(chunkFrom + maxBlockRange, toBlock);
@@ -941,26 +943,45 @@ async function updateHolderCounts() {
                 }
               }
               
-              // Delay between chunks to avoid rate limits (longer delay for more chunks)
+              consecutiveErrors = 0; // Reset error counter on success
+              
+              // Much longer delays between chunks to avoid rate limits
               if (chunkCount > 0) {
-                const delay = chunkCount % 3 === 0 ? 300 : 150; // Longer delay every 3rd chunk
+                // Exponential backoff: 1s, 2s, 3s, etc.
+                const delay = Math.min(3000, 1000 + (chunkCount * 200));
                 await new Promise(resolve => setTimeout(resolve, delay));
+              } else {
+                // Even delay before first chunk
+                await new Promise(resolve => setTimeout(resolve, 1000));
               }
             } catch (e) {
-              // If we hit rate limit, stop immediately
+              consecutiveErrors++;
+              
+              // If we hit rate limit, stop immediately and wait longer
               if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('exceeded') || e.message.includes('10 block range'))) {
                 rateLimitHit = true;
                 console.error(`  ⚠️  Rate limit hit for ${deployment.tokenName || 'token'}, stopping holder check`);
+                // Wait 10 seconds before continuing to next token
+                await new Promise(resolve => setTimeout(resolve, 10000));
                 break;
               }
               console.error(`  ⚠️  Error fetching logs for blocks ${chunkFrom}-${chunkTo}:`, e.message);
-              // On error, add delay before retrying
-              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              // Exponential backoff on errors
+              const errorDelay = Math.min(5000, 1000 * Math.pow(2, consecutiveErrors));
+              await new Promise(resolve => setTimeout(resolve, errorDelay));
+              
+              // If too many consecutive errors, stop
+              if (consecutiveErrors >= 3) {
+                rateLimitHit = true;
+                console.error(`  ⚠️  Too many errors for ${deployment.tokenName || 'token'}, stopping`);
+                break;
+              }
             }
             chunkFrom = chunkTo + 1;
             chunkCount++;
           }
-          
+
           // For old tokens where we only checked recent blocks, use existing count as base
           if (checkFromBlock > fromBlock && deployment.holderCount) {
             // We checked recent blocks, so we have new holders but not all historical
@@ -970,7 +991,7 @@ async function updateHolderCounts() {
             // For new tokens or when we checked all blocks, use the holder set size
             newHolderCount = holders.size;
           }
-          
+
           // If we hit rate limits, don't update (keep existing count)
           if (rateLimitHit && chunkCount === 0) {
             // Skip this token entirely if we hit rate limit on first chunk
