@@ -101,6 +101,13 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
     return `${Math.floor(diff / 86400)}d`;
   };
 
+  const formatVolume = (volume) => {
+    if (!volume || volume === 0) return '-';
+    if (volume >= 1) return `${volume.toFixed(2)} ETH`;
+    if (volume >= 0.01) return `${volume.toFixed(3)} ETH`;
+    return `<0.01 ETH`;
+  };
+
   const truncateAddress = (address) => {
     if (!address || address === 'N/A') return 'N/A';
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -389,7 +396,13 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
         <div className="mobile-card-row">
           <span className="mobile-card-label">Dev:</span>
           <span className="mobile-card-value" style={{ fontSize: '0.75rem' }}>
-            {ensName || truncateAddress(deployment.from)}
+            {ensName ? (
+              <a href={`https://basescan.org/address/${deployment.from}`} target="_blank" rel="noopener noreferrer" className="ens-name-link">
+                {ensName}
+              </a>
+            ) : (
+              <code onClick={() => copyToClipboard(deployment.from)}>{truncateAddress(deployment.from)}</code>
+            )}
           </span>
         </div>
         <div className="mobile-card-row">
@@ -419,6 +432,12 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
               lastCheckTime={deployment.lastHolderCheck || (deployment.holderCountHistory && deployment.holderCountHistory.length > 0 ? deployment.holderCountHistory[deployment.holderCountHistory.length - 1].timestamp : null)}
             />
           </div>
+        </div>
+        <div className="mobile-card-row">
+          <span className="mobile-card-label">Volume 24h:</span>
+          <span className="mobile-card-value">
+            {formatVolume(deployment.volume24h)}
+          </span>
         </div>
         <div className="mobile-card-links">
           {deployment.links?.dexscreener && (
@@ -645,7 +664,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
                         </td>
                         <td className="dev-cell">
                           {ensName ? (
-                            <span className="ens-name">{ensName}</span>
+                            <a href={`https://basescan.org/address/${deployment.from}`} target="_blank" rel="noopener noreferrer" className="ens-name-link">
+                              <span className="ens-name">{ensName}</span>
+                            </a>
                           ) : (
                             <code onClick={() => copyToClipboard(deployment.from)}>
                               {truncateAddress(deployment.from)}
@@ -689,6 +710,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
                             </div>
                             <HolderCheckTime lastCheckTime={deployment.lastHolderCheck || (deployment.holderCountHistory && deployment.holderCountHistory.length > 0 ? deployment.holderCountHistory[deployment.holderCountHistory.length - 1].timestamp : null)} />
                           </div>
+                        </td>
+                        <td className="volume-cell">
+                          {formatVolume(deployment.volume24h)}
                         </td>
                         <td className="time-cell">
                           <LiveTime timestamp={deployment.timestamp} />
@@ -743,6 +767,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
                     <th className="sortable" onClick={() => handleSort('holderCount')}>
                       Holders <SortArrow field="holderCount" />
                     </th>
+                    <th className="sortable" onClick={() => handleSort('volume24h')}>
+                      Volume 24h <SortArrow field="volume24h" />
+                    </th>
                     <th className="sortable" onClick={() => handleSort('timestamp')}>
                       Age <SortArrow field="timestamp" />
                     </th>
@@ -764,7 +791,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
                         </td>
                         <td className="dev-cell">
                           {ensName ? (
-                            <span className="ens-name">{ensName}</span>
+                            <a href={`https://basescan.org/address/${deployment.from}`} target="_blank" rel="noopener noreferrer" className="ens-name-link">
+                              <span className="ens-name">{ensName}</span>
+                            </a>
                           ) : (
                             <code onClick={() => copyToClipboard(deployment.from)} title={deployment.from}>
                               {truncateAddress(deployment.from)}
@@ -808,6 +837,9 @@ function TokenFeed({ deployments, hasEnoughTokens = false }) {
                             </div>
                             <HolderCheckTime lastCheckTime={deployment.lastHolderCheck || (deployment.holderCountHistory && deployment.holderCountHistory.length > 0 ? deployment.holderCountHistory[deployment.holderCountHistory.length - 1].timestamp : null)} />
                           </div>
+                        </td>
+                        <td className="volume-cell">
+                          {formatVolume(deployment.volume24h)}
                         </td>
                         <td className="time-cell">
                           <LiveTime timestamp={deployment.timestamp} />

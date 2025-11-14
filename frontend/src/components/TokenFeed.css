@@ -196,6 +196,26 @@
   font-weight: 500;
 }
 
+.ens-name-link {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s;
+}
+
+.ens-name-link:hover {
+  text-decoration: underline;
+  color: #10b981;
+}
+
+.ens-name-link .ens-name {
+  color: #10b981;
+  cursor: pointer;
+}
+
+.ens-name-link:hover .ens-name {
+  color: #34d399;
+}
+
 .alert-time-compact {
   color: #6b7280;
   white-space: nowrap;
@@ -581,6 +601,15 @@
   color: #6b7280;
   opacity: 0.8;
   font-weight: 400;
+}
+
+.volume-cell {
+  padding: 0.5rem;
+  text-align: right;
+  color: #10b981;
+  font-weight: 500;
+  font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .holder-trend {

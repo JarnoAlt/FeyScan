@@ -31,6 +31,9 @@ function dbToDeployment(row) {
     holderCount: row.holder_count || 0,
     holderCountHistory: row.holder_count_history || [],
     lastHolderCheck: row.last_holder_check || null,
+    volume24h: parseFloat(row.volume_24h) || 0,
+    volume7d: parseFloat(row.volume_7d) || 0,
+    volumeHistory: row.volume_history || [],
     links: row.links || {}
   };
 }

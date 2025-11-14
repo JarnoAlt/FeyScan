@@ -52,6 +52,9 @@ function deploymentToDB(deployment) {
     holder_count: deployment.holderCount || 0,
     holder_count_history: deployment.holderCountHistory || [],
     last_holder_check: deployment.lastHolderCheck || null,
+    volume_24h: deployment.volume24h || 0,
+    volume_7d: deployment.volume7d || 0,
+    volume_history: deployment.volumeHistory || [],
     links: deployment.links || {}
   };
 }
@@ -75,6 +78,9 @@ function dbToDeployment(row) {
     holderCount: row.holder_count || 0,
     holderCountHistory: row.holder_count_history || [],
     lastHolderCheck: row.last_holder_check || null,
+    volume24h: parseFloat(row.volume_24h) || 0,
+    volume7d: parseFloat(row.volume_7d) || 0,
+    volumeHistory: row.volume_history || [],
     links: row.links || {}
   };
 }
@@ -201,6 +207,9 @@ export async function updateDeployment(txHash, updates) {
     if (updates.holderCountHistory !== undefined) dbUpdates.holder_count_history = updates.holderCountHistory;
     if (updates.ensName !== undefined) dbUpdates.ens_name = updates.ensName;
     if (updates.lastHolderCheck !== undefined) dbUpdates.last_holder_check = updates.lastHolderCheck;
+    if (updates.volume24h !== undefined) dbUpdates.volume_24h = updates.volume24h;
+    if (updates.volume7d !== undefined) dbUpdates.volume_7d = updates.volume7d;
+    if (updates.volumeHistory !== undefined) dbUpdates.volume_history = updates.volumeHistory;
 
     const { error } = await supabase
       .from('deployments')
