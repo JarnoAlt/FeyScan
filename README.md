@@ -1,89 +1,114 @@
 # Fey Token Launchpad Monitor
 
-Live monitoring system for the Fey.money token launchpad contract on Base Network. Monitors for new "Deploy Token" method calls every 15 seconds and displays them on a fast, live website.
-
-## Contract Address
-
-`0x8EEF0dC80ADf57908bB1be0236c2a72a7e379C2d`
-
-## Tech Stack
-
-- **Backend**: Node.js + Express + ethers.js
-- **Frontend**: React + Vite
-- **Storage**: JSON file
-- **Dev Tools**: nodemon (backend), Vite HMR (frontend)
-
-## Setup
-
-### Prerequisites
-
-- Node.js (v18 or higher)
-- npm
-- Alchemy API key (optional but recommended for better performance)
-
-### Installation
-
-1. Set up environment variables:
-   - Create a `.env` file in the `backend` directory
-   - Add your Alchemy API key: `ALCHEMY_API_KEY=your_key_here`
-   - If no Alchemy key is provided, the system will use the public Base Network RPC (rate-limited)
-
-2. Install backend dependencies:
-```powershell
-cd backend
-npm install
-```
-
-2. Install frontend dependencies:
-```powershell
-cd frontend
-npm install
-```
-
-## Development
-
-### Start Backend (with nodemon hot reload)
-
-From the `backend` directory:
-```powershell
-npm run dev
-```
-
-The backend will:
-- Start on port 3001
-- Automatically restart on file changes (nodemon)
-- Begin monitoring the contract every 15 seconds
-
-### Start Frontend (with Vite HMR)
-
-From the `frontend` directory:
-```powershell
-npm run dev
-```
-
-The frontend will:
-- Start on port 3000
-- Hot reload on file changes (Vite HMR)
-- Poll the backend API every 15 seconds for new deployments
-
-## API Endpoints
-
-- `GET /api/deployments` - Get all stored deployments
-- `GET /api/latest` - Get the most recent deployment
-- `GET /api/health` - Health check
-
-## Data Storage
-
-Deployments are stored in `data/deployments.json`. The system:
-- Prevents duplicates (by transaction hash)
-- Keeps the most recent 1000 deployments
-- Stores token name, address, transaction details, and external links
+Live monitoring dashboard for token deployments on the Fey launchpad (Base Network).
 
 ## Features
 
-- Real-time monitoring of token deployments
-- Automatic token name detection
-- Quick links to DexScreener, Defined.fi, and BaseScan
-- Modern, responsive UI
-- Fast development workflow with hot reload
+- Real-time token deployment tracking
+- Holder count monitoring with live updates
+- Dev buy alerts (notifications for high dev buys > 0.25 ETH)
+- Priority-based holder checking (focuses on high-volume tokens)
+- Multi-provider RPC support (Alchemy + Infura for parallel operations)
+- Supabase integration for persistent storage
+- Black & green Fey-themed UI
 
+## Tech Stack
+
+- **Frontend**: React + Vite
+- **Backend**: Node.js + Express
+- **Database**: Supabase (PostgreSQL)
+- **Blockchain**: ethers.js (Base Network)
+- **RPC Providers**: Alchemy, Infura
+
+## Environment Variables
+
+### Backend (set in Vercel dashboard or `.env` for local dev)
+
+```
+ALCHEMY_API_KEY=your_alchemy_key
+INFURA_API_KEY=your_infura_key
+ETHERSCAN_API_KEY=your_etherscan_key
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+PORT=3001
+```
+
+### Frontend (set in Vercel dashboard or `.env.local`)
+
+```
+VITE_API_URL=http://localhost:3001  # Only needed for local dev
+```
+
+## Local Development
+
+### Backend
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Vercel Deployment
+
+### Important: Backend Monitoring Limitation
+
+**Vercel is serverless** - it doesn't support long-running processes. The continuous monitoring loop in `monitor.js` won't work on Vercel.
+
+**Recommended Solution**: Deploy the backend separately:
+- **Railway** (recommended): Easy deployment, supports long-running processes
+- **Render**: Free tier available, supports web services
+- **Fly.io**: Good for Node.js apps
+- **DigitalOcean App Platform**: Simple deployment
+
+Keep the frontend on Vercel, deploy backend elsewhere, and update `frontend/src/App.jsx` API URL.
+
+### If Deploying Full Stack to Vercel
+
+1. **Set Environment Variables** in Vercel dashboard:
+   - Go to your project settings → Environment Variables
+   - Add all backend environment variables:
+     - `ALCHEMY_API_KEY`
+     - `INFURA_API_KEY`
+     - `ETHERSCAN_API_KEY`
+     - `SUPABASE_URL`
+     - `SUPABASE_ANON_KEY`
+   - Frontend variables are optional (only needed if using custom API URL)
+
+2. **Deploy**:
+   - Connect your GitHub repo to Vercel
+   - Vercel will auto-detect and deploy using `vercel.json`
+
+3. **Convert Monitoring to Cron Jobs** (if keeping backend on Vercel):
+   - Remove `startMonitoring()` from `server.js`
+   - Create Vercel Cron Jobs that call `/api/backfill` periodically
+   - This won't be real-time but will check periodically
+
+## Database Setup
+
+Run the SQL migrations in `backend/supabase-setup.sql` and `backend/MIGRATION_002_add_last_holder_check.sql` in your Supabase SQL editor.
+
+## Project Structure
+
+```
+├── backend/
+│   ├── src/
+│   │   ├── monitor.js       # Blockchain monitoring logic
+│   │   ├── server.js        # Express API server
+│   │   ├── supabase-storage.js  # Supabase database layer
+│   │   └── storage.js       # JSON fallback storage
+│   └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx          # Main app component
+│   │   └── components/
+│   │       └── TokenFeed.jsx  # Deployment feed component
+│   └── package.json
+└── vercel.json              # Vercel configuration
+```

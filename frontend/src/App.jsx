@@ -3,17 +3,20 @@ import TokenFeed from './components/TokenFeed';
 import './App.css';
 import feyLogo from '/FeyScanner.jpg';
 
-// Detect if we're running through ngrok and use appropriate API URL
+// Detect environment and use appropriate API URL
 const getApiUrl = () => {
   // If we have an explicit API URL in env, use it
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
 
+  // If on Vercel (or production), use relative API path
+  if (import.meta.env.PROD || window.location.hostname.includes('vercel.app')) {
+    return '/api';
+  }
+
   // If accessing through ngrok, use the same host for API
   if (window.location.hostname.includes('ngrok')) {
-    // Use the same ngrok domain but point to backend port
-    // User needs to expose backend on ngrok separately, or we use relative URLs
     return `${window.location.protocol}//${window.location.hostname}/api`;
   }
 

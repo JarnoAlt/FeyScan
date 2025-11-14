@@ -8,7 +8,11 @@ import {
   loadMonitorState
 } from './supabase-storage.js';
 
-dotenv.config();
+// Load environment variables (dotenv for local dev, Vercel provides them automatically)
+// Only load dotenv if not in production (Vercel sets NODE_ENV=production)
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 
 const CONTRACT_ADDRESS = '0x8EEF0dC80ADf57908bB1be0236c2a72a7e379C2d';
 // Multi-provider setup for parallel operations

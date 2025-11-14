@@ -2,7 +2,11 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { readDeployments, getAllDeployments as getJSONDeployments } from './storage.js';
 
-dotenv.config();
+// Load environment variables (dotenv for local dev, Vercel provides them automatically)
+// Only load dotenv if not in production (Vercel sets NODE_ENV=production)
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
