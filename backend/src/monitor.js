@@ -228,14 +228,14 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
     // We'll use a partial signature to catch the event
     // Full event: TokenCreated(address,address,address,string,string,string,string,string,address,bytes32,int24,address,address,address,uint256,address[])
     const tokenCreatedTopic = ethers.id('TokenCreated(address,address,address,string,string,string,string,string,address,bytes32,int24,address,address,address,uint256,address[])');
-    
+
     // Get logs in chunks to respect RPC limits
     const MAX_BLOCK_RANGE = 10;
     let foundCount = 0;
-    
+
     for (let blockNum = fromBlock; blockNum <= toBlock; blockNum += MAX_BLOCK_RANGE) {
       const endBlock = Math.min(blockNum + MAX_BLOCK_RANGE - 1, toBlock);
-      
+
       try {
         const logs = await provider.getLogs({
           address: CONTRACT_ADDRESS,
@@ -243,31 +243,31 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
           toBlock: endBlock,
           topics: [tokenCreatedTopic] // Filter by event signature
         });
-        
+
         for (const log of logs) {
           try {
             // Decode the event (indexed params are in topics, non-indexed in data)
             // topics[0] = event signature
             // topics[1] = msgSender (indexed)
-            // topics[2] = tokenAddress (indexed) 
+            // topics[2] = tokenAddress (indexed)
             // topics[3] = tokenAdmin (indexed)
             // data contains: tokenMetadata, tokenImage, tokenName, tokenSymbol, tokenContext, poolHook, poolId, startingTick, pairedToken, locker, mevModule, extensionsSupply, extensions[]
-            
+
             if (log.topics && log.topics.length >= 4) {
               const msgSender = '0x' + log.topics[1].slice(-40);
               const tokenAddress = '0x' + log.topics[2].slice(-40);
               const tokenAdmin = '0x' + log.topics[3].slice(-40);
-              
+
               // Get transaction and receipt for additional data
               const tx = await provider.getTransaction(log.transactionHash);
               const receipt = await provider.getTransactionReceipt(log.transactionHash);
-              
+
               // Check if we already have this deployment
               const existing = await getAllDeployments();
               if (existing.some(d => d.txHash === log.transactionHash || d.tokenAddress?.toLowerCase() === tokenAddress.toLowerCase())) {
                 continue; // Already processed
               }
-              
+
               // Decode the event data to get token name, symbol, etc.
               // For now, extract from transaction receipt logs (ERC20 Transfer from address(0))
               // This is more reliable than parsing the event data directly
@@ -278,7 +278,7 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
             console.error(`  ⚠️  Error processing TokenCreated event:`, e.message);
           }
         }
-        
+
         // Small delay to avoid rate limits
         if (blockNum < toBlock) {
           await new Promise(resolve => setTimeout(resolve, 50));
@@ -291,7 +291,7 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
         console.error(`  ⚠️  Error fetching TokenCreated events for blocks ${blockNum}-${endBlock}:`, e.message);
       }
     }
-    
+
     if (foundCount > 0) {
       console.log(`  ✅ Found ${foundCount} new token deployment(s) via TokenCreated events`);
     }
@@ -472,40 +472,41 @@ async function extractAndStoreDeployment(tx, receipt, knownTokenAddress = null) 
       const transferEventSignature = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
       for (const log of receipt.logs) {
-      const logAddress = log.address.toLowerCase();
+        const logAddress = log.address.toLowerCase();
 
-      // Skip known standard tokens (WETH, USDC, etc.)
-      if (KNOWN_TOKENS.has(logAddress)) {
-        continue;
+        // Skip known standard tokens (WETH, USDC, etc.)
+        if (KNOWN_TOKENS.has(logAddress)) {
+          continue;
+        }
+
+        // Check for Transfer events from token contracts
+        if (log.topics && log.topics.length >= 3 &&
+            log.topics[0] === transferEventSignature &&
+            logAddress !== deployerAddr) {
+          tokenAddress = log.address;
+          break; // Found token address from Transfer event
+        }
+
+        // Fallback: any log from non-deployer address (but skip known tokens)
+        if (logAddress !== deployerAddr && !tokenAddress && !KNOWN_TOKENS.has(logAddress)) {
+          tokenAddress = log.address;
+        }
       }
 
-      // Check for Transfer events from token contracts
-      if (log.topics && log.topics.length >= 3 &&
-          log.topics[0] === transferEventSignature &&
-          logAddress !== deployerAddr) {
-        tokenAddress = log.address;
-        break; // Found token address from Transfer event
+      // If no token address in logs, check if contract was created
+      if (!tokenAddress && receipt.contractAddress) {
+        tokenAddress = receipt.contractAddress;
       }
 
-      // Fallback: any log from non-deployer address (but skip known tokens)
-      if (logAddress !== deployerAddr && !tokenAddress && !KNOWN_TOKENS.has(logAddress)) {
-        tokenAddress = log.address;
-      }
-    }
-
-    // If no token address in logs, check if contract was created
-    if (!tokenAddress && receipt.contractAddress) {
-      tokenAddress = receipt.contractAddress;
-    }
-
-    // If still no token address, try to decode from transaction data
-    if (!tokenAddress) {
-      // Try to extract address from transaction input data
-      // This depends on the contract ABI, but we'll try common patterns
-      const data = tx.data;
-      if (data.length >= 138) { // 0x + 4 bytes selector + 32 bytes * 2 (at least)
-        // Try to extract address from data (addresses are 20 bytes = 40 hex chars)
-        // This is a heuristic and may not always work
+      // If still no token address, try to decode from transaction data
+      if (!tokenAddress) {
+        // Try to extract address from transaction input data
+        // This depends on the contract ABI, but we'll try common patterns
+        const data = tx.data;
+        if (data.length >= 138) { // 0x + 4 bytes selector + 32 bytes * 2 (at least)
+          // Try to extract address from data (addresses are 20 bytes = 40 hex chars)
+          // This is a heuristic and may not always work
+        }
       }
     }
 
@@ -812,7 +813,7 @@ async function updateHolderCounts() {
     // Sort by priority (highest first) and take top 10 for this cycle
     tokensWithPriority.sort((a, b) => b.priority - a.priority);
     const toUpdate = tokensWithPriority.slice(0, 10).map(t => t.deployment);
-    
+
     // Store volume data for all tokens (not just top 10)
     // Update volume for tokens with activity
     const volumeUpdatePromises = tokensWithPriority
@@ -822,21 +823,21 @@ async function updateHolderCounts() {
         // TODO: Improve to calculate actual ETH volume from Swap events
         const volume24h = recentVolume * 0.01;
         const volume7d = volume24h * 7; // Rough estimate
-        
+
         // Get existing volume history
         const volumeHistory = deployment.volumeHistory || [];
         const newVolumeHistory = [...volumeHistory, { volume: volume24h, timestamp: currentTimestamp }];
         if (newVolumeHistory.length > 30) {
           newVolumeHistory.shift(); // Keep last 30 data points
         }
-        
+
         await updateDeployment(deployment.txHash, {
           volume24h: volume24h,
           volume7d: volume7d,
           volumeHistory: newVolumeHistory
         });
       });
-    
+
     // Update volumes in parallel (don't await, let it run in background)
     Promise.all(volumeUpdatePromises).catch(err => {
       console.error('Error updating volume data:', err);
@@ -893,15 +894,15 @@ async function updateHolderCounts() {
           const fromBlock = deployment.blockNumber;
           const toBlock = currentBlock;
           const blockRange = toBlock - fromBlock;
-          
+
           // Respect RPC limits: Alchemy free tier allows max 10 blocks, use smaller chunks to be safe
           const maxBlockRange = 8; // Use 8 blocks to stay under Alchemy's 10-block limit
-          
+
           // Always use chunked queries to avoid rate limits
           let chunkFrom = fromBlock;
           let chunkCount = 0;
           const maxChunks = 50; // Limit chunks to avoid timeout (400 blocks max per check)
-          
+
           while (chunkFrom < toBlock && chunkCount < maxChunks) {
             const chunkTo = Math.min(chunkFrom + maxBlockRange, toBlock);
             try {
@@ -925,7 +926,7 @@ async function updateHolderCounts() {
                   }
                 }
               }
-              
+
               // Small delay between chunks to avoid rate limits
               if (chunkCount > 0 && chunkCount % 5 === 0) {
                 await new Promise(resolve => setTimeout(resolve, 100));
@@ -941,7 +942,7 @@ async function updateHolderCounts() {
             chunkFrom = chunkTo + 1;
             chunkCount++;
           }
-          
+
           // If we didn't get all blocks, log a warning
           if (chunkFrom < toBlock) {
             console.log(`  ⚠️  Only checked ${chunkCount * maxBlockRange} blocks (${blockRange} total) due to rate limits`);
