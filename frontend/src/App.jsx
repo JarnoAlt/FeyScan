@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useAccount, useBalance } from 'wagmi';
+import { formatUnits } from 'viem';
 import TokenFeed from './components/TokenFeed';
+import WalletConnect from './components/WalletConnect';
+import { FEYSCAN_TOKEN_ADDRESS, REQUIRED_BALANCE } from './components/WalletConnect';
 import './App.css';
 import feyLogo from '/FeyScanner.jpg';
 
@@ -31,11 +35,24 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [serverStatus, setServerStatus] = useState('checking');
+  const { address, isConnected } = useAccount();
+
+  // Check token balance for gating
+  const { data: tokenBalance } = useBalance({
+    address: address,
+    token: FEYSCAN_TOKEN_ADDRESS,
+    chainId: 8453, // Base mainnet
+    query: {
+      enabled: isConnected && !!address,
+    },
+  });
+
+  const hasEnoughTokens = tokenBalance && tokenBalance.value >= REQUIRED_BALANCE;
 
   const fetchDeployments = async () => {
     try {
-      // Use relative URL if on ngrok, otherwise use full API_URL
-      const apiEndpoint = window.location.hostname.includes('ngrok')
+      // Use relative URL if on production/Vercel or ngrok, otherwise use full API_URL
+      const apiEndpoint = (import.meta.env.PROD || window.location.hostname.includes('ngrok') || window.location.hostname.includes('vercel.app'))
         ? '/api/deployments'
         : `${API_URL}/api/deployments`;
 
@@ -59,7 +76,7 @@ function App() {
 
   const checkServerHealth = async () => {
     try {
-      const healthEndpoint = window.location.hostname.includes('ngrok')
+      const healthEndpoint = (import.meta.env.PROD || window.location.hostname.includes('ngrok') || window.location.hostname.includes('vercel.app'))
         ? '/api/health'
         : `${API_URL}/api/health`;
 
@@ -114,10 +131,16 @@ function App() {
                       <span className="status-dot"></span>
                       <span className="status-text">{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Offline' : 'Checking...'}</span>
                     </div>
+                    <div className="wallet-connect-wrapper">
+                      <WalletConnect />
+                    </div>
                   </div>
             <p className="subtitle">Live monitoring of token deployments on Base Network</p>
-            <p className="contract-address">
-              Contract: <code>0x8EEF0dC80ADf57908bB1be0236c2a72a7e379C2d</code>
+            <p className="token-address">
+              FeyScan Token: <code onClick={() => {
+                navigator.clipboard.writeText('0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659');
+                alert('Token address copied!');
+              }}>0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659</code>
             </p>
           </div>
           <div className="donation-section">
@@ -154,9 +177,17 @@ function App() {
         {loading && <div className="loading">Loading deployments...</div>}
         {error && <div className="error">Error: {error}</div>}
         {!loading && !error && (
-          <TokenFeed deployments={deployments} serverStatus={serverStatus} />
+          <TokenFeed deployments={deployments} serverStatus={serverStatus} hasEnoughTokens={hasEnoughTokens} />
         )}
       </main>
+
+      <footer className="App-footer">
+        <div className="footer-content">
+          <p className="footer-text">
+            Fey Launcher Contract: <code>0x8EEF0dC80ADf57908bB1be0236c2a72a7e379C2d</code>
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

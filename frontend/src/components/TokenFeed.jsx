@@ -79,7 +79,7 @@ function HolderCheckTime({ lastCheckTime }) {
   );
 }
 
-function TokenFeed({ deployments }) {
+function TokenFeed({ deployments, hasEnoughTokens = false }) {
   const [sortField, setSortField] = useState('timestamp');
   const [sortDirection, setSortDirection] = useState('desc');
   const [ensNames, setEnsNames] = useState({});
@@ -441,8 +441,17 @@ function TokenFeed({ deployments }) {
 
       {/* Main Content */}
       <div className="main-content">
-        {/* Newest 5 Section */}
-        {newest5.length > 0 && (
+        {/* Newest 5 Section - Token Gated */}
+        {!hasEnoughTokens && (
+          <div className="token-gate-message">
+            <div className="gate-content">
+              <h2>🔒 Token Gated Content</h2>
+              <p>Hold at least 10,000,000 FeyScan tokens to view the newest 5 deployments.</p>
+              <p className="gate-subtext">Connect your wallet to check your balance.</p>
+            </div>
+          </div>
+        )}
+        {hasEnoughTokens && newest5.length > 0 && (
           <div className="newest-section">
             <div className="section-header">
               <h2>Newest 5 Deployments</h2>
