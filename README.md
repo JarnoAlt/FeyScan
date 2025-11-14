@@ -1,24 +1,41 @@
-# Fey Token Launchpad Monitor
+# FeyScan - Token Launchpad Monitor
 
 Live monitoring dashboard for token deployments on the Fey launchpad (Base Network).
 
+🔗 **Live Site**: [feyscan.xyz](https://feyscan.xyz)
+🔗 **GitHub**: [github.com/dutchiono/FeyScan](https://github.com/dutchiono/FeyScan)
+
 ## Features
 
-- Real-time token deployment tracking
-- Holder count monitoring with live updates
-- Dev buy alerts (notifications for high dev buys > 0.25 ETH)
-- Priority-based holder checking (focuses on high-volume tokens)
-- Multi-provider RPC support (Alchemy + Infura for parallel operations)
-- Supabase integration for persistent storage
-- Black & green Fey-themed UI
+- **Real-time token deployment tracking** - Monitor new token launches as they happen
+- **Holder count monitoring** - Live updates with trend indicators (green for up, red for down)
+- **Dev buy alerts** - Browser notifications for high dev buys (> 0.25 ETH, different sound for > 1 ETH)
+- **Priority-based holder checking** - Intelligently focuses on high-volume, high-activity tokens
+- **Advanced filtering** - Hide zero dev buys, remove duplicate names, filter serial deployers
+- **Token gating** - Premium features require 10M FeyScan tokens (or dev whitelist access)
+- **Multi-provider RPC support** - Alchemy + Infura for parallel operations and reliability
+- **Supabase integration** - Persistent storage with real-time capabilities
+- **Mobile-responsive** - Optimized for mobile devices and Farcaster mini apps
+- **Black & green Fey-themed UI** - Clean, modern interface matching Fey's brand
 
 ## Tech Stack
 
-- **Frontend**: React + Vite
+- **Frontend**: React + Vite, wagmi, @web3modal/wagmi
 - **Backend**: Node.js + Express
 - **Database**: Supabase (PostgreSQL)
 - **Blockchain**: ethers.js (Base Network)
 - **RPC Providers**: Alchemy, Infura
+- **Deployment**: Vercel (frontend), separate backend deployment recommended
+
+## Token Gating
+
+FeyScan uses token gating to provide premium features. Users need to hold **10 million FeyScan tokens** to access:
+- "Newest 5 Deployments" section
+- Full deployment history
+
+**FeyScan Token Address**: `0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659` (Base Network)
+
+Dev whitelist addresses have free access without token requirements.
 
 ## Environment Variables
 

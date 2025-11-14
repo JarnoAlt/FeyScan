@@ -119,12 +119,45 @@ function App() {
                     </div>
                   </div>
             <p className="subtitle">Live monitoring of token deployments on Base Network</p>
-            <p className="token-address">
-              FeyScan Token: <code onClick={() => {
-                navigator.clipboard.writeText('0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659');
-                alert('Token address copied!');
-              }}>0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659</code>
-            </p>
+            <div className="buy-section">
+              <div className="buy-buttons">
+                <a
+                  href="https://app.uniswap.org/#/tokens/base/0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="buy-button primary"
+                >
+                  🚀 Buy FeyScan
+                </a>
+                <a
+                  href="https://app.uniswap.org/#/swap?chain=base&outputCurrency=0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="buy-button secondary"
+                >
+                  📊 Trade Page
+                </a>
+                <button
+                  className="buy-button copy-button"
+                  onClick={() => {
+                    navigator.clipboard.writeText('0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659');
+                    alert('Token address copied!');
+                  }}
+                  title="Copy token address"
+                >
+                  📋 Copy Address
+                </button>
+              </div>
+              <div className="token-address-display">
+                <span className="token-label">FeyScan Token:</span>
+                <code className="token-address-code" onClick={() => {
+                  navigator.clipboard.writeText('0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659');
+                  alert('Token address copied!');
+                }}>
+                  0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659
+                </code>
+              </div>
+            </div>
           </div>
           <div className="donation-section">
             <div className="donation-header">
