@@ -64,7 +64,8 @@ function deploymentToDB(deployment) {
     dev_net_transfer: deployment.devNetTransfer || 0,
     last_transfer_check: deployment.lastTransferCheck || null,
     is_pruned: deployment.isPruned || false,
-    links: deployment.links || {}
+    links: deployment.links || {},
+    ...(deployment.farcasterData && { farcaster_data: deployment.farcasterData })
   };
 }
 
@@ -99,7 +100,8 @@ function dbToDeployment(row) {
     devNetTransfer: parseFloat(row.dev_net_transfer) || 0,
     lastTransferCheck: row.last_transfer_check || null,
     isPruned: row.is_pruned || false,
-    links: row.links || {}
+    links: row.links || {},
+    farcasterData: row.farcaster_data || null
   };
 }
 
@@ -248,6 +250,7 @@ export async function updateDeployment(txHash, updates) {
     if (updates.devNetTransfer !== undefined) dbUpdates.dev_net_transfer = updates.devNetTransfer;
     if (updates.lastTransferCheck !== undefined) dbUpdates.last_transfer_check = updates.lastTransferCheck;
     if (updates.isPruned !== undefined) dbUpdates.is_pruned = updates.isPruned;
+    if (updates.farcasterData !== undefined) dbUpdates.farcaster_data = updates.farcasterData;
 
     const { error } = await supabase
       .from('deployments')

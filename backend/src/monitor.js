@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import dotenv from 'dotenv';
+import { NeynarAPIClient, Configuration } from '@neynar/nodejs-sdk';
 // Use Supabase if available, otherwise fall back to JSON
 import {
   addDeployment,
@@ -48,6 +49,24 @@ const ETHERSCAN_API_URL = 'https://api.basescan.org/api';
 const ALCHEMY_TRACE_URL = ALCHEMY_API_KEY_PAID
   ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY_PAID}`
   : null;
+
+// Neynar API for Farcaster data
+const NEYNAR_API_KEY = process.env.NEYNAR_API_KEY;
+let neynarClient = null;
+
+if (NEYNAR_API_KEY) {
+  try {
+    const config = new Configuration({
+      apiKey: NEYNAR_API_KEY,
+    });
+    neynarClient = new NeynarAPIClient(config);
+    console.log('✅ Neynar client initialized for Farcaster data');
+  } catch (error) {
+    console.error('❌ Error initializing Neynar client:', error.message);
+  }
+} else {
+  console.log('⚠️  Neynar API key not configured - Farcaster data will not be fetched');
+}
 
 // Free tier block range limit (10 blocks)
 const FREE_TIER_MAX_BLOCK_RANGE = 10;
@@ -1404,6 +1423,40 @@ async function calculateActualVolume(deployment, currentBlock, currentTimestamp)
 }
 
 /**
+ * Fetch Farcaster user data from Neynar API based on Ethereum address
+ * Returns Farcaster profile data or null if not found
+ */
+async function fetchFarcasterUser(ethereumAddress) {
+  if (!neynarClient || !ethereumAddress || ethereumAddress === 'N/A') {
+    return null;
+  }
+
+  try {
+    const response = await neynarClient.fetchBulkUsersByEthOrSolAddress({
+      addresses: [ethereumAddress]
+    });
+
+    if (response && response.result && response.result.users && response.result.users.length > 0) {
+      const user = response.result.users[0];
+      return {
+        fid: user.fid,
+        username: user.username,
+        displayName: user.displayName,
+        pfp: user.pfp?.url || null,
+        followerCount: user.followerCount || 0,
+        followingCount: user.followingCount || 0,
+        activeStatus: user.activeStatus || 'inactive'
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.log(`  ⚠️  Error fetching Farcaster data for ${ethereumAddress.slice(0, 10)}...: ${error.message}`);
+    return null;
+  }
+}
+
+/**
  * Fetch market cap from DEXScreener API
  * Returns market cap in USD, or 0 if unavailable
  */
@@ -1844,13 +1897,28 @@ async function updateHolderCounts() {
           console.error(`  ⚠️  Error fetching market cap for ${deployment.tokenName || 'token'}:`, e.message);
         }
 
+        // Fetch Farcaster data if volume crosses threshold and we don't have it yet
+        let farcasterData = deployment.farcasterData || null;
+        if (volume24h >= MIN_VOLUME_THRESHOLD && !farcasterData && deployment.from) {
+          console.log(`  🔍 Checking Farcaster for ${deployment.tokenName || 'token'} (volume ${volume24h.toFixed(3)} ETH >= ${MIN_VOLUME_THRESHOLD} ETH)`);
+          try {
+            farcasterData = await fetchFarcasterUser(deployment.from);
+            if (farcasterData) {
+              console.log(`  ✅ Found Farcaster profile: @${farcasterData.username} (${farcasterData.followerCount} followers)`);
+            }
+          } catch (e) {
+            console.error(`  ⚠️  Error fetching Farcaster data for ${deployment.tokenName || 'token'}:`, e.message);
+          }
+        }
+
         await updateDeployment(deployment.txHash, {
           volume1h: volume1h,
           volume6h: volume6h,
           volume24h: volume24h,
           volume7d: volume7d,
           volumeHistory: newVolumeHistory,
-          marketCap: marketCap
+          marketCap: marketCap,
+          ...(farcasterData && { farcasterData: farcasterData })
         });
 
         // Delay between updates (faster in catch-up mode)

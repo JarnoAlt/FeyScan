@@ -1089,6 +1089,33 @@ function TokenFeed({
                       </button>
                       <SortArrow field="timestamp" />
                     </th>
+                    <th className="sortable" onClick={() => handleSort('from')}>
+                      Dev
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Dev: The wallet address of the token deployer. Shows ENS name if available, otherwise shows truncated address. Click to view on BaseScan.');
+                        }}
+                        title="What is Dev?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="from" />
+                    </th>
+                    <th>
+                      Farcaster
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Farcaster: Social profile of the deployer (fetched when token volume crosses 1 ETH threshold). Shows username, followers, and profile picture.');
+                        }}
+                        title="What is Farcaster?"
+                      >
+                        ?
+                      </button>
+                    </th>
                     <th>
                       Links
                       <button
@@ -1121,7 +1148,17 @@ function TokenFeed({
                         <td className="token-name-cell">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             {index < 3 && <span className="runner-badge-small" title="Hot Runner">🔥</span>}
-                            <strong>{runner.tokenName || 'Unknown'}</strong>
+                            <strong
+                              onClick={() => {
+                                if (runner.tokenAddress) {
+                                  copyToClipboard(runner.tokenAddress);
+                                }
+                              }}
+                              style={{ cursor: 'pointer', userSelect: 'none' }}
+                              title={`Click to copy token address: ${runner.tokenAddress || 'N/A'}`}
+                            >
+                              {runner.tokenName || 'Unknown'}
+                            </strong>
                           </div>
                         </td>
                         <td className="holder-count-cell">
@@ -1175,6 +1212,50 @@ function TokenFeed({
                         </td>
                         <td className="time-cell">
                           <LiveTime timestamp={runner.timestamp} />
+                        </td>
+                        <td className="dev-cell">
+                          {runner.from ? (
+                            <a
+                              href={runner.links?.basescan || `https://basescan.org/address/${runner.from}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ens-name-link"
+                              title={runner.from}
+                            >
+                              {ensName || truncateAddress(runner.from)}
+                            </a>
+                          ) : (
+                            <span style={{ color: '#666' }}>-</span>
+                          )}
+                        </td>
+                        <td className="farcaster-cell">
+                          {runner.farcasterData ? (
+                            <div className="farcaster-profile" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              {runner.farcasterData.pfp && (
+                                <img
+                                  src={runner.farcasterData.pfp}
+                                  alt={runner.farcasterData.username}
+                                  style={{ width: '24px', height: '24px', borderRadius: '50%' }}
+                                />
+                              )}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                <a
+                                  href={`https://warpcast.com/${runner.farcasterData.username}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ color: '#16a34a', textDecoration: 'none', fontWeight: 'bold' }}
+                                  title={`@${runner.farcasterData.username} - ${runner.farcasterData.followerCount} followers`}
+                                >
+                                  @{runner.farcasterData.username}
+                                </a>
+                                <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                                  {runner.farcasterData.followerCount} followers
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#666' }}>-</span>
+                          )}
                         </td>
                         <td className="links-cell">
                           <div className="compact-links">
@@ -1353,6 +1434,33 @@ function TokenFeed({
                       </button>
                       <SortArrow field="timestamp" />
                     </th>
+                    <th className="sortable" onClick={() => handleSort('from')}>
+                      Dev
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Dev: The wallet address of the token deployer. Shows ENS name if available, otherwise shows truncated address. Click to view on BaseScan.');
+                        }}
+                        title="What is Dev?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="from" />
+                    </th>
+                    <th>
+                      Farcaster
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Farcaster: Social profile of the deployer (fetched when token volume crosses 1 ETH threshold). Shows username, followers, and profile picture.');
+                        }}
+                        title="What is Farcaster?"
+                      >
+                        ?
+                      </button>
+                    </th>
                     <th>
                       Links
                       <button
@@ -1386,7 +1494,17 @@ function TokenFeed({
                       <tr key={deployment.txHash || index} className={`newest-row ${isRunner ? 'runner-highlight' : ''}`}>
                         <td className="token-name-cell">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <strong>{deployment.tokenName || 'Unknown'}</strong>
+                            <strong
+                              onClick={() => {
+                                if (deployment.tokenAddress) {
+                                  copyToClipboard(deployment.tokenAddress);
+                                }
+                              }}
+                              style={{ cursor: 'pointer', userSelect: 'none' }}
+                              title={`Click to copy token address: ${deployment.tokenAddress || 'N/A'}`}
+                            >
+                              {deployment.tokenName || 'Unknown'}
+                            </strong>
                             {isRunner && <span className="runner-badge-small" title="Hot Runner">🔥</span>}
                             {holderTrend && holderTrend.change > 0 && <span className="growth-badge-small" title="Growing">📈</span>}
                             {isHighVolume && <span className="volume-badge-small" title="High Volume">💰</span>}
@@ -1454,6 +1572,50 @@ function TokenFeed({
                         </td>
                         <td className="time-cell">
                           <LiveTime timestamp={deployment.timestamp} />
+                        </td>
+                        <td className="dev-cell">
+                          {deployment.from ? (
+                            <a
+                              href={deployment.links?.basescan || `https://basescan.org/address/${deployment.from}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ens-name-link"
+                              title={deployment.from}
+                            >
+                              {ensName || truncateAddress(deployment.from)}
+                            </a>
+                          ) : (
+                            <span style={{ color: '#666' }}>-</span>
+                          )}
+                        </td>
+                        <td className="farcaster-cell">
+                          {deployment.farcasterData ? (
+                            <div className="farcaster-profile" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              {deployment.farcasterData.pfp && (
+                                <img
+                                  src={deployment.farcasterData.pfp}
+                                  alt={deployment.farcasterData.username}
+                                  style={{ width: '24px', height: '24px', borderRadius: '50%' }}
+                                />
+                              )}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                <a
+                                  href={`https://warpcast.com/${deployment.farcasterData.username}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ color: '#16a34a', textDecoration: 'none', fontWeight: 'bold' }}
+                                  title={`@${deployment.farcasterData.username} - ${deployment.farcasterData.followerCount} followers`}
+                                >
+                                  @{deployment.farcasterData.username}
+                                </a>
+                                <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                                  {deployment.farcasterData.followerCount} followers
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#666' }}>-</span>
+                          )}
                         </td>
                         <td className="links-cell">
                           <div className="compact-links">
@@ -1623,6 +1785,33 @@ function TokenFeed({
                       </button>
                       <SortArrow field="timestamp" />
                     </th>
+                    <th className="sortable" onClick={() => handleSort('from')}>
+                      Dev
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Dev: The wallet address of the token deployer. Shows ENS name if available, otherwise shows truncated address. Click to view on BaseScan.');
+                        }}
+                        title="What is Dev?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="from" />
+                    </th>
+                    <th>
+                      Farcaster
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Farcaster: Social profile of the deployer (fetched when token volume crosses 1 ETH threshold). Shows username, followers, and profile picture.');
+                        }}
+                        title="What is Farcaster?"
+                      >
+                        ?
+                      </button>
+                    </th>
                     <th>
                       Links
                       <button
@@ -1656,7 +1845,17 @@ function TokenFeed({
                       <tr key={deployment.txHash || index + 5} className={isRunner ? 'runner-highlight' : ''}>
                         <td className="token-name-cell">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <strong>{deployment.tokenName || 'Unknown'}</strong>
+                            <strong
+                              onClick={() => {
+                                if (deployment.tokenAddress) {
+                                  copyToClipboard(deployment.tokenAddress);
+                                }
+                              }}
+                              style={{ cursor: 'pointer', userSelect: 'none' }}
+                              title={`Click to copy token address: ${deployment.tokenAddress || 'N/A'}`}
+                            >
+                              {deployment.tokenName || 'Unknown'}
+                            </strong>
                             {isRunner && <span className="runner-badge-small" title="Hot Runner">🔥</span>}
                             {holderTrend && holderTrend.change > 0 && <span className="growth-badge-small" title="Growing">📈</span>}
                             {isHighVolume && <span className="volume-badge-small" title="High Volume">💰</span>}
@@ -1724,6 +1923,50 @@ function TokenFeed({
                         </td>
                         <td className="time-cell">
                           <LiveTime timestamp={deployment.timestamp} />
+                        </td>
+                        <td className="dev-cell">
+                          {deployment.from ? (
+                            <a
+                              href={deployment.links?.basescan || `https://basescan.org/address/${deployment.from}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ens-name-link"
+                              title={deployment.from}
+                            >
+                              {ensName || truncateAddress(deployment.from)}
+                            </a>
+                          ) : (
+                            <span style={{ color: '#666' }}>-</span>
+                          )}
+                        </td>
+                        <td className="farcaster-cell">
+                          {deployment.farcasterData ? (
+                            <div className="farcaster-profile" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              {deployment.farcasterData.pfp && (
+                                <img
+                                  src={deployment.farcasterData.pfp}
+                                  alt={deployment.farcasterData.username}
+                                  style={{ width: '24px', height: '24px', borderRadius: '50%' }}
+                                />
+                              )}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                <a
+                                  href={`https://warpcast.com/${deployment.farcasterData.username}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ color: '#16a34a', textDecoration: 'none', fontWeight: 'bold' }}
+                                  title={`@${deployment.farcasterData.username} - ${deployment.farcasterData.followerCount} followers`}
+                                >
+                                  @{deployment.farcasterData.username}
+                                </a>
+                                <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                                  {deployment.farcasterData.followerCount} followers
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#666' }}>-</span>
+                          )}
                         </td>
                         <td className="links-cell">
                           <div className="compact-links">

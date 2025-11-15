@@ -452,17 +452,19 @@
 }
 
 /* Fixed column widths for Hot Runners table - SAME AS NEWEST 5 */
-.runners-table th:nth-child(1) { width: 12%; } /* Token */
-.runners-table th:nth-child(2) { width: 8%; } /* Holders */
-.runners-table th:nth-child(3) { width: 7%; } /* Growth */
-.runners-table th:nth-child(4) { width: 8%; } /* Volume 1h */
-.runners-table th:nth-child(5) { width: 8%; } /* Volume 6h */
-.runners-table th:nth-child(6) { width: 9%; } /* Volume 24h */
-.runners-table th:nth-child(7) { width: 8%; } /* MCAP */
-.runners-table th:nth-child(8) { width: 7%; } /* Score */
-.runners-table th:nth-child(9) { width: 8%; } /* Dev Buy */
-.runners-table th:nth-child(10) { width: 7%; } /* Age */
-.runners-table th:nth-child(11) { width: 10%; } /* Links */
+.runners-table th:nth-child(1) { width: 11%; } /* Token */
+.runners-table th:nth-child(2) { width: 7%; } /* Holders */
+.runners-table th:nth-child(3) { width: 6%; } /* Growth */
+.runners-table th:nth-child(4) { width: 7%; } /* Volume 1h */
+.runners-table th:nth-child(5) { width: 7%; } /* Volume 6h */
+.runners-table th:nth-child(6) { width: 8%; } /* Volume 24h */
+.runners-table th:nth-child(7) { width: 7%; } /* MCAP */
+.runners-table th:nth-child(8) { width: 6%; } /* Score */
+.runners-table th:nth-child(9) { width: 7%; } /* Dev Buy */
+.runners-table th:nth-child(10) { width: 5%; } /* Age */
+.runners-table th:nth-child(11) { width: 10%; } /* Dev */
+.runners-table th:nth-child(12) { width: 10%; } /* Farcaster */
+.runners-table th:nth-child(13) { width: 7%; } /* Links */
 
 .runners-table td {
   padding: 0.6rem 0.5rem;
@@ -759,23 +761,27 @@
 }
 
 /* Fixed column widths for Newest 5 table */
-.newest-table th:nth-child(1) { width: 12%; } /* Token */
-.newest-table th:nth-child(2) { width: 8%; } /* Holders */
-.newest-table th:nth-child(3) { width: 7%; } /* Growth */
-.newest-table th:nth-child(4) { width: 8%; } /* Volume 1h */
-.newest-table th:nth-child(5) { width: 8%; } /* Volume 6h */
-.newest-table th:nth-child(6) { width: 9%; } /* Volume 24h */
-.newest-table th:nth-child(7) { width: 8%; } /* MCAP */
-.newest-table th:nth-child(8) { width: 7%; } /* Score */
-.newest-table th:nth-child(9) { width: 8%; } /* Dev Buy */
-.newest-table th:nth-child(10) { width: 7%; } /* Age */
-.newest-table th:nth-child(11) { width: 10%; } /* Links */
+.newest-table th:nth-child(1) { width: 11%; } /* Token */
+.newest-table th:nth-child(2) { width: 7%; } /* Holders */
+.newest-table th:nth-child(3) { width: 6%; } /* Growth */
+.newest-table th:nth-child(4) { width: 7%; } /* Volume 1h */
+.newest-table th:nth-child(5) { width: 7%; } /* Volume 6h */
+.newest-table th:nth-child(6) { width: 8%; } /* Volume 24h */
+.newest-table th:nth-child(7) { width: 7%; } /* MCAP */
+.newest-table th:nth-child(8) { width: 6%; } /* Score */
+.newest-table th:nth-child(9) { width: 7%; } /* Dev Buy */
+.newest-table th:nth-child(10) { width: 5%; } /* Age */
+.newest-table th:nth-child(11) { width: 10%; } /* Dev */
+.newest-table th:nth-child(12) { width: 10%; } /* Farcaster */
+.newest-table th:nth-child(13) { width: 7%; } /* Links */
 
 .newest-table th:first-child {
   padding-left: 0.75rem;
 }
 
-.newest-table th:last-child {
+.newest-table th:last-child,
+.runners-table th:last-child,
+.deployments-table th:last-child {
   padding-right: 0.75rem;
 }
 
@@ -861,17 +867,19 @@
 }
 
 /* Fixed column widths for All Deployments table - SAME AS NEWEST 5 */
-.deployments-table th:nth-child(1) { width: 12%; } /* Token */
-.deployments-table th:nth-child(2) { width: 8%; } /* Holders */
-.deployments-table th:nth-child(3) { width: 7%; } /* Growth */
-.deployments-table th:nth-child(4) { width: 8%; } /* Volume 1h */
-.deployments-table th:nth-child(5) { width: 8%; } /* Volume 6h */
-.deployments-table th:nth-child(6) { width: 9%; } /* Volume 24h */
-.deployments-table th:nth-child(7) { width: 8%; } /* MCAP */
-.deployments-table th:nth-child(8) { width: 7%; } /* Score */
-.deployments-table th:nth-child(9) { width: 8%; } /* Dev Buy */
-.deployments-table th:nth-child(10) { width: 7%; } /* Age */
-.deployments-table th:nth-child(11) { width: 10%; } /* Links */
+.deployments-table th:nth-child(1) { width: 11%; } /* Token */
+.deployments-table th:nth-child(2) { width: 7%; } /* Holders */
+.deployments-table th:nth-child(3) { width: 6%; } /* Growth */
+.deployments-table th:nth-child(4) { width: 7%; } /* Volume 1h */
+.deployments-table th:nth-child(5) { width: 7%; } /* Volume 6h */
+.deployments-table th:nth-child(6) { width: 8%; } /* Volume 24h */
+.deployments-table th:nth-child(7) { width: 7%; } /* MCAP */
+.deployments-table th:nth-child(8) { width: 6%; } /* Score */
+.deployments-table th:nth-child(9) { width: 7%; } /* Dev Buy */
+.deployments-table th:nth-child(10) { width: 5%; } /* Age */
+.deployments-table th:nth-child(11) { width: 10%; } /* Dev */
+.deployments-table th:nth-child(12) { width: 10%; } /* Farcaster */
+.deployments-table th:nth-child(13) { width: 7%; } /* Links */
 
 .deployments-table th:last-child {
   border-right: none;
@@ -1176,15 +1184,51 @@
   max-width: 80px;
 }
 
+.farcaster-cell {
+  text-align: left;
+  padding: 0.5rem;
+  min-width: 120px;
+  max-width: 180px;
+}
+
+.farcaster-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.farcaster-profile img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #16a34a;
+  flex-shrink: 0;
+}
+
+.farcaster-profile a {
+  color: #16a34a;
+  text-decoration: none;
+  font-weight: bold;
+  font-size: 0.85rem;
+}
+
+.farcaster-profile a:hover {
+  text-decoration: underline;
+  color: #22c55e;
+}
+
 .links-cell {
-  min-width: 90px;
-  max-width: 140px;
+  text-align: center;
+  padding: 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .compact-links {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  justify-content: center;
 }
 
 .compact-link {

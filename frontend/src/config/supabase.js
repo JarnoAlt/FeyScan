@@ -58,7 +58,8 @@ function dbToDeployment(row) {
     devTransferredIn: (row.dev_transferred_in != null && row.dev_transferred_in !== undefined) ? parseFloat(row.dev_transferred_in) || 0 : 0,
     devNetTransfer: (row.dev_net_transfer != null && row.dev_net_transfer !== undefined) ? parseFloat(row.dev_net_transfer) || 0 : 0,
     lastTransferCheck: row.last_transfer_check || null,
-    links: row.links || {}
+    links: row.links || {},
+    farcasterData: row.farcaster_data || null
   };
 }
 
