@@ -365,10 +365,12 @@ async function getLogsInChunks(provider, filter, fromBlock, toBlock, maxBlockRan
  * Smart RPC call with automatic fallback: Try free API first, fallback to paid on rate limit
  * Includes overall timeout to prevent infinite hangs
  */
-async function smartRpcCall(operation, usePaid = false, retries = 2) {
+async function smartRpcCall(operation, usePaid = false, retries = 2, operationName = 'RPC call') {
   const OVERALL_TIMEOUT = 30000; // 30 second overall timeout for any RPC call
 
-  const operationWithTimeout = async (provider) => {
+  const operationWithTimeout = async (provider, isPaid) => {
+    const emoji = isPaid ? '💰' : '🆓';
+    console.log(`  ${emoji} Using ${isPaid ? 'PAID' : 'FREE'} API for ${operationName}`);
     return await Promise.race([
       operation(provider),
       new Promise((_, reject) =>
@@ -382,12 +384,12 @@ async function smartRpcCall(operation, usePaid = false, retries = 2) {
     if (!providerPaid || !ALCHEMY_API_KEY_PAID) {
       throw new Error('Paid API required but not available');
     }
-    return await operationWithTimeout(providerPaid);
+    return await operationWithTimeout(providerPaid, true);
   }
 
   // Try free API first
   try {
-    return await operationWithTimeout(providerFree);
+    return await operationWithTimeout(providerFree, false);
   } catch (error) {
     // Check if it's a rate limit error
     const isRateLimit = error.message && (
@@ -411,7 +413,7 @@ async function smartRpcCall(operation, usePaid = false, retries = 2) {
         await new Promise(resolve => setTimeout(resolve, backoffTime));
 
         try {
-          return await operationWithTimeout(providerPaid);
+          return await operationWithTimeout(providerPaid, true);
         } catch (paidError) {
           // If paid also rate limited, wait longer and retry
           if (paidError.message && paidError.message.includes('429')) {
@@ -450,6 +452,9 @@ async function smartGetLogs(filter, fromBlock, toBlock, options = {}) {
   // If using paid API, can use larger block ranges
   const actualMaxRange = usePaid ? 2000 : maxBlockRange;
 
+  const blockRange = toBlock - fromBlock;
+  const operationName = `getLogs (blocks ${fromBlock}-${toBlock}, range: ${blockRange})`;
+
   const operation = async (provider) => {
     // If range is small enough, call directly
     if (toBlock - fromBlock <= actualMaxRange) {
@@ -464,7 +469,7 @@ async function smartGetLogs(filter, fromBlock, toBlock, options = {}) {
     return await getLogsInChunks(provider, filter, fromBlock, toBlock, actualMaxRange);
   };
 
-  return await smartRpcCall(operation, usePaid);
+  return await smartRpcCall(operation, usePaid, 2, operationName);
 }
 
 /**
@@ -1099,6 +1104,7 @@ async function verifyHoldersWithTrace(tokenAddress, potentialHolders, fromBlock,
 
       try {
         // Get trace for the block with timeout
+        console.log(`  💰 Using PAID API for trace_block (block ${blockNum})`);
         const traceController = new AbortController();
         const traceTimeout = setTimeout(() => traceController.abort(), 10000);
         const traceResponse = await fetch(ALCHEMY_TRACE_URL, {
@@ -1239,6 +1245,7 @@ async function calculateActualVolume(deployment, currentBlock, currentTimestamp)
           if (!DEX_ROUTERS.has(toAddress)) continue;
 
           // Get transaction trace using Alchemy Trace API with timeout
+          console.log(`  💰 Using PAID API for trace_transaction (${txHash.slice(0, 10)}...)`);
           const traceController = new AbortController();
           const traceTimeout = setTimeout(() => traceController.abort(), 10000); // 10 second timeout
 
@@ -1675,7 +1682,7 @@ async function updateHolderCounts() {
       // If token has no activity and was checked recently, give it a long cooldown (5 minutes)
       const CHILL_MODE_COOLDOWN = 300; // 5 minutes for inactive tokens
       const hasNoActivity = !hasActivity && hasData; // Has data but no activity
-      
+
       if (hasNoActivity && timeSinceCheck < CHILL_MODE_COOLDOWN) {
         // Token has no activity and was checked recently - CHILL MODE (skip for 5 minutes)
         priority -= 10000; // Massive penalty - skip for 5 minutes
