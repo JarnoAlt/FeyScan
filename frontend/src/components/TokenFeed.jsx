@@ -1294,6 +1294,13 @@ function TokenFeed({
           <div className="newest-section">
             <div className="section-header">
               <h2>Newest 5 Deployments</h2>
+              <button
+                className="collapse-button"
+                onClick={() => setIsNewest5Collapsed(!isNewest5Collapsed)}
+                title={isNewest5Collapsed ? 'Expand' : 'Collapse'}
+              >
+                {isNewest5Collapsed ? '▼' : '▲'}
+              </button>
             </div>
             {/* Mobile Card View */}
             <div className="mobile-deployments-list">
@@ -1302,6 +1309,7 @@ function TokenFeed({
               ))}
             </div>
             {/* Desktop Table View */}
+            {!isNewest5Collapsed && (
             <div className="newest-table-container">
               <table className="newest-table">
                 <thead>
@@ -1987,7 +1995,6 @@ function TokenFeed({
                 </tbody>
               </table>
             </div>
-            )}
           </div>
         )}
       </div>

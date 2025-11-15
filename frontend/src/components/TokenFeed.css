@@ -422,6 +422,7 @@
   width: 100%;
   max-width: 100%;
   max-height: 60vh;
+  position: relative;
 }
 
 .runners-table {
@@ -447,8 +448,9 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  position: relative;
+  min-width: fit-content;
 }
 
 /* Fixed column widths for Hot Runners table - SAME AS NEWEST 5 */
@@ -733,6 +735,7 @@
   width: 100%;
   max-width: 100%;
   max-height: 60vh;
+  position: relative;
 }
 
 .newest-table {
@@ -746,6 +749,9 @@
 .newest-table thead {
   background: #000000;
   border-bottom: 2px solid rgba(22, 163, 74, 0.4);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .newest-table th {
@@ -756,8 +762,9 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  position: relative;
+  min-width: fit-content;
 }
 
 /* Fixed column widths for Newest 5 table */
@@ -828,7 +835,8 @@
   background: #000000;
   width: 100%;
   max-width: 100%;
-  max-height: 70vh;
+  max-height: 60vh;
+  position: relative;
 }
 
 .deployments-table {
@@ -847,12 +855,6 @@
   z-index: 10;
 }
 
-.newest-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
 .deployments-table th {
   padding: 0.6rem 0.5rem;
   text-align: left;
@@ -861,8 +863,9 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  position: relative;
+  min-width: fit-content;
   border-right: 1px solid #16a34a;
 }
 
@@ -1101,6 +1104,9 @@
   transition: all 0.2s;
   padding: 0;
   line-height: 1;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
 }
 
 .help-icon:hover {
