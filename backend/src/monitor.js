@@ -37,9 +37,9 @@ const BASE_RPC_PAID = ALCHEMY_API_KEY_PAID
 let CATCH_UP_MODE = process.env.CATCH_UP_MODE !== 'false'; // Default to true unless explicitly disabled
 let POLL_INTERVAL = CATCH_UP_MODE ? 100 : 90000; // 0.1s in catch-up mode, 90s normally
 
-// Track catch-up completion (auto-disable after 3 consecutive cycles with low work)
+// Track catch-up completion (auto-disable after 2 consecutive cycles with low work)
 let catchUpLowWorkCycles = 0;
-const CATCH_UP_AUTO_DISABLE_THRESHOLD = 3; // Disable after 3 cycles with minimal work
+const CATCH_UP_AUTO_DISABLE_THRESHOLD = 2; // Disable after 2 cycles with minimal work (faster auto-disable)
 
 // Volume threshold: Skip tokens with volume below this (in ETH)
 // Set via environment variable or use default
@@ -1671,19 +1671,33 @@ async function updateHolderCounts() {
         }
       }
 
-      // Cooldown period: Skip tokens checked very recently (unless tier 1 or very new)
-      if (timeSinceCheck < 600 && !isVeryNew && !isTier1) {
+      // CHILL MODE: Aggressive cooldown for tokens with no activity
+      // If token has no activity and was checked recently, give it a long cooldown (5 minutes)
+      const CHILL_MODE_COOLDOWN = 300; // 5 minutes for inactive tokens
+      const hasNoActivity = !hasActivity && hasData; // Has data but no activity
+      
+      if (hasNoActivity && timeSinceCheck < CHILL_MODE_COOLDOWN) {
+        // Token has no activity and was checked recently - CHILL MODE (skip for 5 minutes)
+        priority -= 10000; // Massive penalty - skip for 5 minutes
+      } else if (hasNoActivity && timeSinceCheck < CHILL_MODE_COOLDOWN * 2) {
+        // Still in extended cooldown for inactive tokens
+        priority -= 5000;
+      } else if (timeSinceCheck < 600 && !isVeryNew && !isTier1 && !hasActivity) {
+        // Regular cooldown for tokens with no activity
         priority -= 5000; // Checked in last 10 min - skip unless tier 1 or very new
-      } else if (timeSinceCheck < 1200 && !isVeryNew && !isTier1) {
+      } else if (timeSinceCheck < 1200 && !isVeryNew && !isTier1 && !hasActivity) {
         priority -= 2000; // Checked in last 20 min - heavy penalty
-      } else if (timeSinceCheck < 1800 && !isTier1) {
+      } else if (timeSinceCheck < 1800 && !isTier1 && !hasActivity) {
         priority -= 500; // Checked in last 30 min - moderate penalty
-      } else if (timeSinceCheck > 1800 && !isStale) {
-        priority += 400; // Not checked in 30+ min - bonus (unless stale)
-      } else if (timeSinceCheck > 1200 && !isStale) {
-        priority += 200; // Not checked in 20+ min
-      } else if (timeSinceCheck > 600 && !isStale) {
-        priority += 100; // Not checked in 10+ min
+      } else if (timeSinceCheck > CHILL_MODE_COOLDOWN && !isStale && hasNoActivity) {
+        // Inactive token not checked in 5+ min - can check again
+        priority += 100; // Low priority for inactive tokens
+      } else if (timeSinceCheck > 1800 && !isStale && hasActivity) {
+        priority += 400; // Active token not checked in 30+ min - bonus
+      } else if (timeSinceCheck > 1200 && !isStale && hasActivity) {
+        priority += 200; // Active token not checked in 20+ min
+      } else if (timeSinceCheck > 600 && !isStale && hasActivity) {
+        priority += 100; // Active token not checked in 10+ min
       }
 
       // Priority 5: Tokens with higher holder counts (more holders = more important)
@@ -1717,7 +1731,7 @@ async function updateHolderCounts() {
     // Sort by priority (highest first) and filter out tokens with negative priority (recently checked)
     tokensWithPriority.sort((a, b) => b.priority - a.priority);
 
-    // Filter out tokens that were checked too recently (negative priority) unless they're very new
+    // Filter out tokens that were checked too recently (negative priority) unless they're very new or have activity
     const filteredByCooldown = tokensWithPriority.filter(t => {
       const age = currentTimestamp - t.deployment.timestamp;
       const isVeryNew = age < 3600; // Less than 1 hour old
@@ -1725,9 +1739,16 @@ async function updateHolderCounts() {
         ? t.deployment.holderCountHistory[t.deployment.holderCountHistory.length - 1].timestamp
         : t.deployment.timestamp);
       const timeSinceCheck = currentTimestamp - lastCheck;
+      const CHILL_MODE_COOLDOWN = 300; // 5 minutes for inactive tokens
 
-      // Allow if priority is positive OR if token is very new (less than 1 hour old)
-      return t.priority > 0 || (isVeryNew && timeSinceCheck > 300); // Very new tokens can be checked every 5 minutes (increased from 1 min)
+      // CHILL MODE: Skip inactive tokens that were checked recently
+      const hasData = t.deployment.holderCountHistory && t.deployment.holderCountHistory.length > 0;
+      if (!t.hasActivity && hasData && timeSinceCheck < CHILL_MODE_COOLDOWN) {
+        return false; // Skip inactive tokens in chill mode
+      }
+
+      // Allow if priority is positive OR if token is very new OR if token has activity
+      return t.priority > 0 || (isVeryNew && timeSinceCheck > 300) || t.hasActivity;
     });
 
     // Reduce tokens per cycle if we're hitting rate limits
@@ -1764,8 +1785,9 @@ async function updateHolderCounts() {
           CATCH_UP_MODE = false;
           POLL_INTERVAL = 90000;
           catchUpLowWorkCycles = 0;
-          console.log('\n🎉 CATCH-UP MODE AUTO-DISABLED: Minimal work detected for 3+ cycles.');
+          console.log('\n🎉 CATCH-UP MODE AUTO-DISABLED: Minimal work detected for 2+ cycles.');
           console.log('   Switching to normal mode (90s intervals) to reduce costs.');
+          console.log('   Most tokens are in chill mode (checked every 5 minutes when inactive).');
           console.log('   To re-enable catch-up mode, set CATCH_UP_MODE=true or restart.\n');
           // Save state
           await saveMonitorState({ lastCheckedBlock, catchUpComplete: true });
