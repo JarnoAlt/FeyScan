@@ -52,6 +52,8 @@ function deploymentToDB(deployment) {
     holder_count: deployment.holderCount || 0,
     holder_count_history: deployment.holderCountHistory || [],
     last_holder_check: deployment.lastHolderCheck || null,
+    ...(deployment.volume1h !== undefined && { volume_1h: deployment.volume1h }),
+    ...(deployment.volume6h !== undefined && { volume_6h: deployment.volume6h }),
     volume_24h: deployment.volume24h || 0,
     volume_7d: deployment.volume7d || 0,
     volume_history: deployment.volumeHistory || [],
@@ -85,8 +87,10 @@ function dbToDeployment(row) {
     holderCount: row.holder_count || 0,
     holderCountHistory: row.holder_count_history || [],
     lastHolderCheck: row.last_holder_check || null,
-    volume24h: parseFloat(row.volume_24h) || 0,
-    volume7d: parseFloat(row.volume_7d) || 0,
+    volume1h: row.volume_1h != null ? parseFloat(row.volume_1h) || 0 : 0,
+    volume6h: row.volume_6h != null ? parseFloat(row.volume_6h) || 0 : 0,
+    volume24h: row.volume_24h != null ? parseFloat(row.volume_24h) || 0 : 0,
+    volume7d: row.volume_7d != null ? parseFloat(row.volume_7d) || 0 : 0,
     volumeHistory: row.volume_history || [],
     marketCap: parseFloat(row.market_cap) || 0,
     devTransferCount: row.dev_transfer_count || 0,
@@ -221,6 +225,19 @@ export async function updateDeployment(txHash, updates) {
     if (updates.holderCountHistory !== undefined) dbUpdates.holder_count_history = updates.holderCountHistory;
     if (updates.ensName !== undefined) dbUpdates.ens_name = updates.ensName;
     if (updates.lastHolderCheck !== undefined) dbUpdates.last_holder_check = updates.lastHolderCheck;
+    // Only update volume1h/volume6h if migration has been run (columns exist)
+    // For now, we'll skip these if they cause errors - user needs to run migration first
+    // The backend will work fine without them, just won't have 1h/6h data until migration is run
+    if (updates.volume1h !== undefined) {
+      // Only include if we're sure the column exists (will be set after migration)
+      // For now, skip to avoid SQL errors
+      // dbUpdates.volume_1h = updates.volume1h;
+    }
+    if (updates.volume6h !== undefined) {
+      // Only include if we're sure the column exists (will be set after migration)
+      // For now, skip to avoid SQL errors
+      // dbUpdates.volume_6h = updates.volume6h;
+    }
     if (updates.volume24h !== undefined) dbUpdates.volume_24h = updates.volume24h;
     if (updates.volume7d !== undefined) dbUpdates.volume_7d = updates.volume7d;
     if (updates.volumeHistory !== undefined) dbUpdates.volume_history = updates.volumeHistory;

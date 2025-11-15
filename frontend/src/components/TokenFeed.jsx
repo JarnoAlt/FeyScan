@@ -463,6 +463,14 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
           aVal = a.holderCount || 0;
           bVal = b.holderCount || 0;
           break;
+        case 'volume1h':
+          aVal = a.volume1h || 0;
+          bVal = b.volume1h || 0;
+          break;
+        case 'volume6h':
+          aVal = a.volume6h || 0;
+          bVal = b.volume6h || 0;
+          break;
         case 'volume24h':
           aVal = a.volume24h || 0;
           bVal = b.volume24h || 0;
@@ -509,98 +517,102 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
   // Mobile Deployment Card Component
   const MobileDeploymentCard = ({ deployment }) => {
     const ensName = getENSName(deployment.from);
-    const holderTrend = deployment.holderCountHistory && deployment.holderCountHistory.length > 1
-      ? (() => {
-          const history = deployment.holderCountHistory;
-          const current = history[history.length - 1].count;
-          const previous = history[history.length - 2].count;
-          const change = current - previous;
-          const changePercent = previous > 0 ? ((change / previous) * 100).toFixed(1) : 0;
-          const isRapid = Math.abs(changePercent) > 10;
-          return { change, changePercent, isRapid, trendClass: change > 0 ? 'up' : change < 0 ? 'down' : '' };
-        })()
-      : null;
+    const history = deployment.holderCountHistory || [];
+    const holderTrend = history.length >= 2 ? (() => {
+      const recent = history[history.length - 1];
+      const previous = history[history.length - 2];
+      const change = recent.count - previous.count;
+      const changePercent = previous.count > 0 ? (change / previous.count) * 100 : 0;
+      return { change, changePercent, isRapid: Math.abs(changePercent) > 20 };
+    })() : null;
 
     return (
       <div className="mobile-deployment-card">
-        <div className="mobile-card-header">
-          <div className="mobile-card-title">{deployment.tokenName || 'Unknown'}</div>
-          <div className="mobile-card-age">
-            <LiveTime timestamp={deployment.timestamp} />
-          </div>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Token Address:</span>
-          <code
-            className="mobile-card-value"
-            onClick={() => copyToClipboard(deployment.tokenAddress)}
-            style={{ cursor: 'pointer', fontSize: '0.75rem' }}
-          >
-            {truncateAddress(deployment.tokenAddress)}
-          </code>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Dev:</span>
-          <span className="mobile-card-value" style={{ fontSize: '0.75rem' }}>
-            {ensName ? (
-              <a href={`https://basescan.org/address/${deployment.from}`} target="_blank" rel="noopener noreferrer" className="ens-name-link">
-                {ensName}
-              </a>
-            ) : (
-              <code onClick={() => copyToClipboard(deployment.from)}>{truncateAddress(deployment.from)}</code>
-            )}
-          </span>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Dev Buy:</span>
-          <div className="mobile-card-value" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span>{deployment.devBuyAmountFormatted || `${deployment.devBuyAmount || 0} ETH`}</span>
-            {deployment.devSold && (
-              <span className="dev-sold-badge">SOLD</span>
-            )}
-          </div>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Holders:</span>
-          <div className="mobile-card-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <span className={`holder-count-number ${holderTrend?.trendClass || ''} ${holderTrend?.isRapid ? 'rapid' : ''}`}>
-                {deployment.holderCount !== undefined ? deployment.holderCount : '-'}
-              </span>
-              {holderTrend && holderTrend.change > 0 && (
-                <span className={`holder-trend up ${holderTrend.isRapid ? 'rapid' : ''}`}>↑</span>
-              )}
-              {holderTrend && holderTrend.change < 0 && (
-                <span className={`holder-trend down ${holderTrend.isRapid ? 'rapid' : ''}`}>↓</span>
-              )}
+        {/* Row 1: Token Name, Age, Holders, Growth */}
+        <div className="mobile-card-row-1">
+          <div className="mobile-card-title-section">
+            <div className="mobile-card-title">{deployment.tokenName || 'Unknown'}</div>
+            <div className="mobile-card-age">
+              <LiveTime timestamp={deployment.timestamp} />
             </div>
-            <HolderCheckTime
-              lastCheckTime={deployment.lastHolderCheck || (deployment.holderCountHistory && deployment.holderCountHistory.length > 0 ? deployment.holderCountHistory[deployment.holderCountHistory.length - 1].timestamp : null)}
-            />
+          </div>
+          <div className="mobile-card-metrics-section">
+            <div className="mobile-card-metric">
+              <span className="mobile-card-metric-label">Holders:</span>
+              <div className="mobile-card-metric-value">
+                <span className={`holder-count-number ${holderTrend?.change > 0 ? 'up' : holderTrend?.change < 0 ? 'down' : ''} ${holderTrend?.isRapid ? 'rapid' : ''}`}>
+                  {deployment.holderCount !== undefined ? deployment.holderCount : '-'}
+                </span>
+                {holderTrend && holderTrend.change > 0 && (
+                  <span className={`holder-trend up ${holderTrend.isRapid ? 'rapid' : ''}`}>↑</span>
+                )}
+                {holderTrend && holderTrend.change < 0 && (
+                  <span className={`holder-trend down`}>↓</span>
+                )}
+              </div>
+            </div>
+            <div className="mobile-card-metric">
+              <span className="mobile-card-metric-label">Growth:</span>
+              <span className="mobile-card-metric-value">
+                {holderTrend && holderTrend.changePercent > 0 ? (
+                  <span className={`growth-indicator ${holderTrend.changePercent > 20 ? 'rapid' : holderTrend.changePercent > 10 ? 'high' : 'medium'}`}>
+                    +{holderTrend.changePercent.toFixed(1)}%
+                  </span>
+                ) : (
+                  <span className="growth-indicator">-</span>
+                )}
+              </span>
+            </div>
           </div>
         </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Volume 24h:</span>
-          <span className="mobile-card-value">
-            {formatVolume(deployment.volume24h)}
-          </span>
-        </div>
-        <div className="mobile-card-links">
-          {deployment.links?.dexscreener && (
-            <a href={deployment.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link" title="DexScreener">
-              DexScreener
-            </a>
-          )}
-          {deployment.links?.defined && (
-            <a href={deployment.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link" title="Defined.fi">
-              Defined.fi
-            </a>
-          )}
-          {deployment.links?.basescan && (
-            <a href={deployment.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link" title="BaseScan">
-              BaseScan
-            </a>
-          )}
+
+        {/* Row 2: Volume, MCAP, Score, Dev Buy, Links */}
+        <div className="mobile-card-row-2">
+          <div className="mobile-card-data-grid">
+            <div className="mobile-card-data-item">
+              <span className="mobile-card-data-label">Vol 1h:</span>
+              <span className="mobile-card-data-value">{formatVolume(deployment.volume1h)}</span>
+            </div>
+            <div className="mobile-card-data-item">
+              <span className="mobile-card-data-label">Vol 6h:</span>
+              <span className="mobile-card-data-value">{formatVolume(deployment.volume6h)}</span>
+            </div>
+            <div className="mobile-card-data-item">
+              <span className="mobile-card-data-label">Vol 24h:</span>
+              <span className="mobile-card-data-value">{formatVolume(deployment.volume24h)}</span>
+            </div>
+            <div className="mobile-card-data-item">
+              <span className="mobile-card-data-label">MCAP:</span>
+              <span className="mobile-card-data-value">{formatMarketCap(deployment.marketCap)}</span>
+            </div>
+            <div className="mobile-card-data-item">
+              <span className="mobile-card-data-label">Score:</span>
+              <span className="mobile-card-data-value">
+                {(() => {
+                  const score = calculateRunnerScore(deployment);
+                  return score.score > 0 ? score.score.toFixed(2) : '-';
+                })()}
+              </span>
+            </div>
+            <div className="mobile-card-data-item">
+              <span className="mobile-card-data-label">Dev Buy:</span>
+              <div className="mobile-card-data-value">
+                <span>{deployment.devBuyAmountFormatted || `${deployment.devBuyAmount || 0} ETH`}</span>
+                {deployment.devSold && <span className="dev-sold-badge">SOLD</span>}
+              </div>
+            </div>
+          </div>
+          <div className="mobile-card-links">
+            {deployment.links?.dexscreener && (
+              <a href={deployment.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link" title="DexScreener">DS</a>
+            )}
+            {deployment.links?.defined && (
+              <a href={deployment.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link" title="Defined.fi">DF</a>
+            )}
+            {deployment.links?.basescan && (
+              <a href={deployment.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link" title="BaseScan">BS</a>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -624,8 +636,75 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
     );
   }
 
+  // Calculate catch-up progress
+  const calculateCatchUpProgress = () => {
+    if (deployments.length === 0) return { progress: 0, complete: 0, total: 0, estimatedTime: null };
+
+    const total = deployments.length;
+    let complete = 0;
+
+    deployments.forEach(d => {
+      // Consider a token "complete" if it has:
+      // - Holder count > 0 OR has holder history
+      // - Volume data (at least one volume metric)
+      // - Market cap checked (even if 0)
+      const hasHolders = d.holderCount > 0 || (d.holderCountHistory && d.holderCountHistory.length > 0);
+      const hasVolume = d.volume1h > 0 || d.volume6h > 0 || d.volume24h > 0 || d.volume7d > 0;
+      const hasMarketCap = d.marketCap !== undefined && d.marketCap !== null; // Even if 0, it means it was checked
+
+      // Token is "complete" if it has holders AND (volume OR market cap checked)
+      if (hasHolders && (hasVolume || hasMarketCap)) {
+        complete++;
+      }
+    });
+
+    const progress = total > 0 ? (complete / total) * 100 : 0;
+    const remaining = total - complete;
+
+    // Estimate time: in catch-up mode, processing ~5 holder checks + ~10 volume updates per cycle
+    // Each cycle is 15 seconds, so ~15 tokens per cycle
+    // But some tokens need multiple cycles, so estimate ~10 tokens per cycle
+    const tokensPerCycle = 10;
+    const cyclesNeeded = Math.ceil(remaining / tokensPerCycle);
+    const estimatedSeconds = cyclesNeeded * 15; // 15s per cycle in catch-up mode
+    const estimatedMinutes = Math.ceil(estimatedSeconds / 60);
+
+    return {
+      progress: Math.round(progress),
+      complete,
+      total,
+      remaining,
+      estimatedTime: remaining > 0 ? estimatedMinutes : null
+    };
+  };
+
+  const catchUpProgress = calculateCatchUpProgress();
+
   return (
     <div className="token-feed-container">
+      {/* Catch-Up Progress Meter */}
+      {catchUpProgress.progress < 100 && (
+        <div className="catch-up-progress">
+          <div className="catch-up-header">
+            <span className="catch-up-title">⚡ Catching Up Data</span>
+            <span className="catch-up-stats">
+              {catchUpProgress.complete} / {catchUpProgress.total} tokens ({catchUpProgress.progress}%)
+            </span>
+          </div>
+          <div className="catch-up-bar-container">
+            <div
+              className="catch-up-bar"
+              style={{ width: `${catchUpProgress.progress}%` }}
+            />
+          </div>
+          {catchUpProgress.estimatedTime && (
+            <div className="catch-up-time">
+              Estimated time remaining: ~{catchUpProgress.estimatedTime} minute{catchUpProgress.estimatedTime !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Global Filters */}
       <div className="global-filters">
         <div className="filters-section">
@@ -688,67 +767,66 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
         </div>
       </div>
 
-      <div className="content-wrapper">
-        {/* Alerts Sidebar - Token Gated */}
-        <div className="alerts-sidebar">
-          {!hasAccess && (
-            <div className="token-gate-message">
-              <div className="gate-content">
-                <h2>🔒 Token Gated</h2>
-                <p>Hold at least 10,000,000 FeyScan tokens to view alerts.</p>
-                <p className="gate-subtext">Connect your wallet to check your balance.</p>
-              </div>
+      {/* Alerts Section - Full Width at Top */}
+      <div className="alerts-section-full">
+        {!hasAccess && (
+          <div className="token-gate-message">
+            <div className="gate-content">
+              <h2>🔒 Token Gated</h2>
+              <p>Hold at least 10,000,000 FeyScan tokens to view alerts.</p>
+              <p className="gate-subtext">Connect your wallet to check your balance.</p>
             </div>
-          )}
-          {hasAccess && (
-            <>
-              <div className="alerts-header">
-                <h2>🔔 Alerts</h2>
-                <span className="alert-count">{alerts.length}</span>
-              </div>
-              <div className="alerts-list">
-                {alerts.length === 0 ? (
-                  <div className="no-alerts">No high dev buy alerts</div>
-                ) : (
-                  alerts.map((alert, index) => {
-                    const ensName = getENSName(alert.from);
-                    return (
-                      <div key={alert.txHash || index} className="alert-item-compact">
-                        <div className="alert-row-1">
-                          <span className="alert-token-compact">{alert.tokenName || 'Unknown'}</span>
-                          <span className="alert-dev-buy-compact">{alert.devBuyAmountFormatted || `${alert.devBuyAmount} ETH`}</span>
-                        </div>
-                        <div className="alert-row-2">
-                          <span className="alert-dev-compact">
-                            {ensName ? (
-                              <span className="ens-name">{ensName}</span>
-                            ) : (
-                              <code className="alert-address" onClick={() => copyToClipboard(alert.from)} title={alert.from}>
-                                {truncateAddress(alert.from)}
-                              </code>
-                            )}
-                          </span>
-                          <span className="alert-time-compact">{formatTimeAgo(alert.timestamp)}</span>
-                          <div className="alert-links-compact">
-                            {alert.links?.dexscreener && (
-                              <a href={alert.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link" title="DexScreener">DS</a>
-                            )}
-                            {alert.links?.defined && (
-                              <a href={alert.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link" title="Defined.fi">DF</a>
-                            )}
-                            {alert.links?.basescan && (
-                              <a href={alert.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link" title="Basescan">BS</a>
-                            )}
-                          </div>
+          </div>
+        )}
+        {hasAccess && (
+          <>
+            <div className="alerts-header">
+              <h2>🔔 Alerts</h2>
+              <span className="alert-count">{alerts.length}</span>
+            </div>
+            <div className="alerts-list">
+              {alerts.length === 0 ? (
+                <div className="no-alerts">No high dev buy alerts</div>
+              ) : (
+                alerts.map((alert, index) => {
+                  const ensName = getENSName(alert.from);
+                  return (
+                    <div key={alert.txHash || index} className="alert-item-compact">
+                      <div className="alert-row-1">
+                        <span className="alert-token-compact">{alert.tokenName || 'Unknown'}</span>
+                        <span className="alert-dev-buy-compact">{alert.devBuyAmountFormatted || `${alert.devBuyAmount} ETH`}</span>
+                      </div>
+                      <div className="alert-row-2">
+                        <span className="alert-dev-compact">
+                          {ensName ? (
+                            <span className="ens-name">{ensName}</span>
+                          ) : (
+                            <code className="alert-address" onClick={() => copyToClipboard(alert.from)} title={alert.from}>
+                              {truncateAddress(alert.from)}
+                            </code>
+                          )}
+                        </span>
+                        <span className="alert-time-compact">{formatTimeAgo(alert.timestamp)}</span>
+                        <div className="alert-links-compact">
+                          {alert.links?.dexscreener && (
+                            <a href={alert.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link" title="DexScreener">DS</a>
+                          )}
+                          {alert.links?.defined && (
+                            <a href={alert.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link" title="Defined.fi">DF</a>
+                          )}
+                          {alert.links?.basescan && (
+                            <a href={alert.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link" title="Basescan">BS</a>
+                          )}
                         </div>
                       </div>
-                    );
-                  })
-                )}
-              </div>
-            </>
-          )}
-        </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Main Content */}
       <div className="main-content">
@@ -773,14 +851,20 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                 <thead>
                   <tr>
                     <th>Rank</th>
-                    <th>Token</th>
-                    <th>Holders</th>
+                    <th className="sortable" onClick={() => handleSort('tokenName')}>
+                      Token <SortArrow field="tokenName" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('holderCount')}>
+                      Holders <SortArrow field="holderCount" />
+                    </th>
                     <th>Growth</th>
-                    <th>Volume 24h</th>
+                    <th className="sortable" onClick={() => handleSort('volume24h')}>
+                      Volume 24h <SortArrow field="volume24h" />
+                    </th>
                     <th className="sortable" onClick={() => handleSort('marketCap')}>
                       MCAP <SortArrow field="marketCap" />
                     </th>
-                    <th>
+                    <th className="sortable" onClick={() => handleSort('runnerScore')}>
                       Score
                       <button
                         className="help-icon"
@@ -792,6 +876,13 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                       >
                         ?
                       </button>
+                      <SortArrow field="runnerScore" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('devBuyAmount')}>
+                      Dev Buy <SortArrow field="devBuyAmount" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('timestamp')}>
+                      Age <SortArrow field="timestamp" />
                     </th>
                     <th>Links</th>
                   </tr>
@@ -839,6 +930,14 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                           )}
                         </td>
                         <td className="volume-cell">
+                          {formatVolume(runner.volume1h)}
+                          {runner.volume1h > 0.1 && <span className="volume-badge">💰</span>}
+                        </td>
+                        <td className="volume-cell">
+                          {formatVolume(runner.volume6h)}
+                          {runner.volume6h > 0.1 && <span className="volume-badge">💰</span>}
+                        </td>
+                        <td className="volume-cell">
                           {formatVolume(runner.runnerData.volume24h)}
                           {runner.runnerData.volume24h > 0.1 && <span className="volume-badge">💰</span>}
                         </td>
@@ -849,6 +948,19 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                           <span className={`runner-score ${runner.runnerData.score > 0.5 ? 'high' : runner.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
                             {runner.runnerData.score.toFixed(2)}
                           </span>
+                        </td>
+                        <td className="dev-buy-cell">
+                          <div className="dev-buy-content">
+                            {runner.devBuyAmountFormatted || `${runner.devBuyAmount || 0} ETH`}
+                            {runner.devSold && (
+                              <span className="dev-sold-badge" title={`Dev sold ${runner.devSoldAmount?.toFixed(4) || 'tokens'}`}>
+                                SOLD
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="time-cell">
+                          <LiveTime timestamp={runner.timestamp} />
                         </td>
                         <td className="links-cell">
                           <div className="compact-links">
@@ -901,19 +1013,38 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                     <th className="sortable" onClick={() => handleSort('tokenName')}>
                       Token <SortArrow field="tokenName" />
                     </th>
-                    <th>Address</th>
-                    <th>Dev</th>
-                    <th className="sortable" onClick={() => handleSort('devBuyAmount')}>
-                      Dev Buy <SortArrow field="devBuyAmount" />
-                    </th>
                     <th className="sortable" onClick={() => handleSort('holderCount')}>
                       Holders <SortArrow field="holderCount" />
+                    </th>
+                    <th>Growth</th>
+                    <th className="sortable" onClick={() => handleSort('volume1h')}>
+                      Volume 1h <SortArrow field="volume1h" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('volume6h')}>
+                      Volume 6h <SortArrow field="volume6h" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('volume24h')}>
                       Volume 24h <SortArrow field="volume24h" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('marketCap')}>
                       MCAP <SortArrow field="marketCap" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('runnerScore')}>
+                      Score
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowScoreHelp(true);
+                        }}
+                        title="How is the score calculated?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="runnerScore" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('devBuyAmount')}>
+                      Dev Buy <SortArrow field="devBuyAmount" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('timestamp')}>
                       Age <SortArrow field="timestamp" />
@@ -971,10 +1102,33 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                           )}
                         </td>
                         <td className="volume-cell">
+                          {formatVolume(deployment.volume1h)}
+                        </td>
+                        <td className="volume-cell">
+                          {formatVolume(deployment.volume6h)}
+                        </td>
+                        <td className="volume-cell">
                           {formatVolume(deployment.volume24h)}
                         </td>
                         <td className="mcap-cell">
                           {formatMarketCap(deployment.marketCap)}
+                        </td>
+                        <td className="score-cell">
+                          {deployment.runnerData && (
+                            <span className={`runner-score ${deployment.runnerData.score > 0.5 ? 'high' : deployment.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
+                              {deployment.runnerData.score.toFixed(2)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="dev-buy-cell">
+                          <div className="dev-buy-content">
+                            {deployment.devBuyAmountFormatted || `${deployment.devBuyAmount || 0} ETH`}
+                            {deployment.devSold && (
+                              <span className="dev-sold-badge" title={`Dev sold ${deployment.devSoldAmount?.toFixed(4) || 'tokens'}`}>
+                                SOLD
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="time-cell">
                           <LiveTime timestamp={deployment.timestamp} />
@@ -982,13 +1136,13 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                         <td className="links-cell">
                           <div className="compact-links">
                             {deployment.links?.dexscreener && (
-                              <a href={deployment.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link">DS</a>
+                              <a href={deployment.links.dexscreener} target="_blank" rel="noopener noreferrer" className="compact-link" title="DexScreener">DS</a>
                             )}
                             {deployment.links?.defined && (
-                              <a href={deployment.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link">DF</a>
+                              <a href={deployment.links.defined} target="_blank" rel="noopener noreferrer" className="compact-link" title="Defined.fi">DF</a>
                             )}
                             {deployment.links?.basescan && (
-                              <a href={deployment.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link">BS</a>
+                              <a href={deployment.links.basescan} target="_blank" rel="noopener noreferrer" className="compact-link" title="BaseScan">BS</a>
                             )}
                           </div>
                         </td>
@@ -1025,6 +1179,12 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                       Holders <SortArrow field="holderCount" />
                     </th>
                     <th>Growth</th>
+                    <th className="sortable" onClick={() => handleSort('volume1h')}>
+                      Volume 1h <SortArrow field="volume1h" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('volume6h')}>
+                      Volume 6h <SortArrow field="volume6h" />
+                    </th>
                     <th className="sortable" onClick={() => handleSort('volume24h')}>
                       Volume 24h <SortArrow field="volume24h" />
                     </th>
@@ -1104,6 +1264,12 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                           )}
                         </td>
                         <td className="volume-cell">
+                          {formatVolume(deployment.volume1h)}
+                        </td>
+                        <td className="volume-cell">
+                          {formatVolume(deployment.volume6h)}
+                        </td>
+                        <td className="volume-cell">
                           {formatVolume(deployment.volume24h)}
                         </td>
                         <td className="mcap-cell">
@@ -1150,7 +1316,6 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
             </div>
           </div>
         )}
-      </div>
       </div>
 
       {/* Score Help Modal */}

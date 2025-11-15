@@ -83,7 +83,13 @@ function App() {
         throw new Error('Supabase not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
       }
 
+      console.log('🔄 Fetching deployments from database...');
       const newDeployments = await getAllDeployments();
+      console.log(`✅ Successfully loaded ${newDeployments.length} deployments`);
+
+      if (newDeployments.length === 0) {
+        console.warn('⚠️  No deployments found in database. This is normal if the backend hasn\'t populated data yet.');
+      }
 
       // Check for new deployments (not seen before)
       if (seenDeployments.size > 0 && newDeployments.length > 0) {
@@ -108,7 +114,12 @@ function App() {
       setError(null);
       setDbStatus('online');
     } catch (err) {
-      console.error('Error fetching deployments from Supabase:', err);
+      console.error('❌ Error fetching deployments from Supabase:', err);
+      console.error('Error details:', {
+        message: err.message,
+        stack: err.stack,
+        name: err.name
+      });
       setError(err.message);
       setDbStatus('offline');
     } finally {

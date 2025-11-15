@@ -32,7 +32,10 @@ const BASE_RPC_PAID = ALCHEMY_API_KEY_PAID
   ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY_PAID}`
   : BASE_RPC_FREE; // Fallback to free if paid not available
 
-const POLL_INTERVAL = 90000; // 90 seconds (reduced from 15s to cut costs by ~6x)
+// CATCH-UP MODE: Set to true to speed up temporarily, then set back to false
+const CATCH_UP_MODE = process.env.CATCH_UP_MODE === 'true' || true; // TEMPORARY: Set to false after catch-up
+
+const POLL_INTERVAL = CATCH_UP_MODE ? 15000 : 90000; // 15s in catch-up mode, 90s normally
 const ETHERSCAN_API_URL = 'https://api.basescan.org/api';
 const ALCHEMY_TRACE_URL = ALCHEMY_API_KEY_PAID
   ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY_PAID}`
@@ -84,6 +87,11 @@ export async function startMonitoring() {
     console.log(`Connected to Base Network:`);
     console.log(`  Free API: ${freeStatus}`);
     console.log(`  Paid API: ${paidStatus} (for trace/large ranges only)`);
+    if (CATCH_UP_MODE) {
+      console.log(`⚡ CATCH-UP MODE ENABLED - Running at 6x speed (${POLL_INTERVAL/1000}s intervals)`);
+      console.log(`⚠️  Processing ${CATCH_UP_MODE ? 5 : 1} holder checks and ${CATCH_UP_MODE ? 10 : 3} volume updates per cycle`);
+      console.log(`⚠️  Remember to set CATCH_UP_MODE = false after catch-up is complete!`);
+    }
 
     // Get current block (use free API)
     const currentBlock = await providerFree.getBlockNumber();
@@ -256,9 +264,9 @@ async function getLogsInChunks(provider, filter, fromBlock, toBlock, maxBlockRan
         toBlock: endBlock
       });
       allLogs.push(...logs);
-      // Small delay between chunks
+      // Delay between chunks (faster in catch-up mode)
       if (endBlock < toBlock) {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, CATCH_UP_MODE ? 50 : 200));
       }
     } catch (error) {
       console.error(`Error fetching logs for blocks ${blockNum}-${endBlock}:`, error.message);
@@ -266,6 +274,76 @@ async function getLogsInChunks(provider, filter, fromBlock, toBlock, maxBlockRan
     }
   }
   return allLogs;
+}
+
+/**
+ * Smart RPC call with automatic fallback: Try free API first, fallback to paid on rate limit
+ */
+async function smartRpcCall(operation, usePaid = false) {
+  // If operation requires paid (trace API, large ranges), use paid directly
+  if (usePaid) {
+    if (!providerPaid || !ALCHEMY_API_KEY_PAID) {
+      throw new Error('Paid API required but not available');
+    }
+    return await operation(providerPaid);
+  }
+
+  // Try free API first
+  try {
+    return await operation(providerFree);
+  } catch (error) {
+    // Check if it's a rate limit error
+    const isRateLimit = error.message && (
+      error.message.includes('Too Many Requests') ||
+      error.message.includes('exceeded') ||
+      error.message.includes('rate limit') ||
+      error.message.includes('429') ||
+      error.message.includes('block range') || // Free tier block range limit
+      error.message.includes('compute units') ||
+      error.message.includes('quota')
+    );
+
+    if (isRateLimit && providerPaid && ALCHEMY_API_KEY_PAID) {
+      console.log(`  ⚠️  Free API rate limited, falling back to paid API`);
+      // Fallback to paid API
+      try {
+        return await operation(providerPaid);
+      } catch (paidError) {
+        console.error(`  ❌ Paid API also failed:`, paidError.message);
+        throw paidError;
+      }
+    }
+
+    // If not rate limit or no paid API, throw original error
+    throw error;
+  }
+}
+
+/**
+ * Smart getLogs with fallback and automatic chunking
+ * Tries free API first, falls back to paid if rate limited
+ */
+async function smartGetLogs(filter, fromBlock, toBlock, options = {}) {
+  const { usePaid = false, maxBlockRange = FREE_TIER_MAX_BLOCK_RANGE } = options;
+
+  // If using paid API, can use larger block ranges
+  const actualMaxRange = usePaid ? 2000 : maxBlockRange;
+
+  const operation = async (provider) => {
+    // If range is small enough, call directly
+    if (toBlock - fromBlock <= actualMaxRange) {
+      return await provider.getLogs({
+        ...filter,
+        fromBlock,
+        toBlock
+      });
+    }
+
+    // Otherwise chunk it
+    return await getLogsInChunks(provider, filter, fromBlock, toBlock, actualMaxRange);
+  };
+
+  return await smartRpcCall(operation, usePaid);
 }
 
 /**
@@ -289,14 +367,14 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
     const recentFromBlock = Math.max(fromBlock, toBlock - RECENT_BLOCK_RANGE);
     if (recentFromBlock <= toBlock) {
       try {
-        const recentLogs = await getLogsInChunks(
-          providerFree,
+        const recentLogs = await smartGetLogs(
           {
             address: CONTRACT_ADDRESS,
             topics: [tokenCreatedTopic]
           },
           recentFromBlock,
-          toBlock
+          toBlock,
+          { usePaid: false } // Try free first, fallback to paid if rate limited
         );
 
         console.log(`  🔍 PRIORITY: Checking recent blocks ${recentFromBlock}-${toBlock}: found ${recentLogs.length} TokenCreated events`);
@@ -333,14 +411,14 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
     // Then check older blocks if needed (for backfilling) - use free API with chunks
     if (fromBlock < recentFromBlock) {
       try {
-        const logs = await getLogsInChunks(
-          providerFree,
+        const logs = await smartGetLogs(
           {
             address: CONTRACT_ADDRESS,
             topics: [tokenCreatedTopic]
           },
           fromBlock,
-          recentFromBlock - 1
+          recentFromBlock - 1,
+          { usePaid: false } // Try free first, fallback to paid if rate limited
         );
 
         console.log(`  🔍 Checking TokenCreated events in blocks ${fromBlock}-${toBlock}: found ${logs.length} events`);
@@ -388,16 +466,16 @@ async function checkTokenCreatedEvents(fromBlock, toBlock) {
         }
       }
     } else {
-      // For larger ranges, use free API with chunks
+      // For larger ranges, use smartGetLogs with automatic fallback
       try {
-        const logs = await getLogsInChunks(
-          providerFree,
+        const logs = await smartGetLogs(
           {
             address: CONTRACT_ADDRESS,
             topics: [tokenCreatedTopic]
           },
           fromBlock,
-          toBlock
+          toBlock,
+          { usePaid: false } // Try free first, fallback to paid if rate limited
         );
 
         console.log(`  🔍 Checking TokenCreated events in blocks ${fromBlock}-${toBlock}: found ${logs.length} events`);
@@ -466,12 +544,12 @@ async function getTransactionsInRange(fromBlock, toBlock) {
   console.log(`  Scanning ${totalBlocks} blocks for transactions...`);
 
   try {
-    // Use free API with 10-block chunks
-    const logs = await getLogsInChunks(
-      providerFree,
+    // Use smartGetLogs with automatic fallback (tries free first, falls back to paid if rate limited)
+    const logs = await smartGetLogs(
       { address: CONTRACT_ADDRESS },
       fromBlock,
-      toBlock
+      toBlock,
+      { usePaid: false } // Try free first, fallback to paid if rate limited
     );
 
     // Extract unique transaction hashes
@@ -946,19 +1024,25 @@ async function verifyHoldersWithTrace(tokenAddress, potentialHolders, fromBlock,
 async function calculateActualVolume(deployment, currentBlock, currentTimestamp) {
   if (!ALCHEMY_TRACE_URL || !deployment.tokenAddress) {
     // Fallback to estimate if Trace API not available
-    return { volume24h: 0, volume7d: 0 };
+    return { volume1h: 0, volume6h: 0, volume24h: 0, volume7d: 0 };
   }
 
   try {
     const tokenAddress = deployment.tokenAddress.toLowerCase();
     const WETH_ADDRESS = '0x4200000000000000000000000000000000000006'.toLowerCase();
 
-    // Calculate block ranges for 24h and 7d (Base has ~2s block time, ~43200 blocks/day)
-    const blocks24h = 43200;
+    // Calculate block ranges (Base has ~2s block time, ~43200 blocks/day)
+    const blocks1h = 1800;   // ~1 hour
+    const blocks6h = 10800;   // ~6 hours
+    const blocks24h = 43200;  // ~24 hours
     const blocks7d = blocks24h * 7;
+    const fromBlock1h = Math.max(currentBlock - blocks1h, deployment.blockNumber);
+    const fromBlock6h = Math.max(currentBlock - blocks6h, deployment.blockNumber);
     const fromBlock24h = Math.max(currentBlock - blocks24h, deployment.blockNumber);
     const fromBlock7d = Math.max(currentBlock - blocks7d, deployment.blockNumber);
 
+    let volume1h = 0;
+    let volume6h = 0;
     let volume24h = 0;
     let volume7d = 0;
 
@@ -967,15 +1051,15 @@ async function calculateActualVolume(deployment, currentBlock, currentTimestamp)
       // Find transactions that interact with DEX routers and involve our token
       const transferEventSignature = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
-      // Get Transfer events for the token (use free API with chunks)
-      const transferLogs = await getLogsInChunks(
-        providerFree,
+      // Get Transfer events for the token (use smartGetLogs with automatic fallback)
+      const transferLogs = await smartGetLogs(
         {
           address: deployment.tokenAddress,
           topics: [transferEventSignature]
         },
         fromBlock24h,
-        currentBlock
+        currentBlock,
+        { usePaid: false } // Try free first, fallback to paid if rate limited
       );
 
       // Get unique transaction hashes
@@ -1027,6 +1111,12 @@ async function calculateActualVolume(deployment, currentBlock, currentTimestamp)
                       const txTimestamp = block ? block.timestamp : currentTimestamp;
                       const age = currentTimestamp - txTimestamp;
 
+                      if (age <= 3600) { // 1 hour
+                        volume1h += ethValue;
+                      }
+                      if (age <= 21600) { // 6 hours
+                        volume6h += ethValue;
+                      }
                       if (age <= 86400) { // 24 hours
                         volume24h += ethValue;
                       }
@@ -1053,29 +1143,54 @@ async function calculateActualVolume(deployment, currentBlock, currentTimestamp)
     }
 
     // If we got actual volume, use it; otherwise use fallback
-    if (volume24h === 0 && volume7d === 0) {
-      // Fallback: estimate based on transfer activity (use free API with chunks)
-      const transferLogs = await getLogsInChunks(
-        providerFree,
+    if (volume1h === 0 && volume6h === 0 && volume24h === 0 && volume7d === 0) {
+      // Fallback: estimate based on transfer activity (use smartGetLogs with automatic fallback)
+      // Get transfers for 1h, 6h, and 24h separately for better estimates
+      const transferLogs1h = await smartGetLogs(
+        {
+          address: deployment.tokenAddress,
+          topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef']
+        },
+        fromBlock1h,
+        currentBlock,
+        { usePaid: false }
+      );
+      const transferLogs6h = await smartGetLogs(
+        {
+          address: deployment.tokenAddress,
+          topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef']
+        },
+        fromBlock6h,
+        currentBlock,
+        { usePaid: false }
+      );
+      const transferLogs24h = await smartGetLogs(
         {
           address: deployment.tokenAddress,
           topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef']
         },
         fromBlock24h,
-        currentBlock
+        currentBlock,
+        { usePaid: false }
       );
-      const transferCount = transferLogs.length;
+
+      const transferCount1h = transferLogs1h.length;
+      const transferCount6h = transferLogs6h.length;
+      const transferCount24h = transferLogs24h.length;
+
       return {
-        volume24h: transferCount * 0.01,
-        volume7d: transferCount * 0.01 * 7
+        volume1h: transferCount1h * 0.01,
+        volume6h: transferCount6h * 0.01,
+        volume24h: transferCount24h * 0.01,
+        volume7d: transferCount24h * 0.01 * 7 // Estimate 7d from 24h
       };
     }
 
-    return { volume24h, volume7d };
+    return { volume1h, volume6h, volume24h, volume7d };
   } catch (error) {
     console.error(`Error in calculateActualVolume:`, error.message);
     // Return zero volume on error
-    return { volume24h: 0, volume7d: 0 };
+    return { volume1h: 0, volume6h: 0, volume24h: 0, volume7d: 0 };
   }
 }
 
@@ -1170,9 +1285,9 @@ async function updateHolderCounts() {
     if (validTokens.length === 0) return;
 
     // Score and prioritize tokens for checking
-    // First pass: Quick volume check for tokens (sequential to reduce costs, limit to top 20)
+    // First pass: Quick volume check for tokens (sequential to reduce costs, limit to top 10)
     // Only check volume for top priority tokens to reduce API calls
-    const tokensToCheckVolume = validTokens.slice(0, 20); // Limit to top 20 tokens
+    const tokensToCheckVolume = validTokens.slice(0, CATCH_UP_MODE ? 20 : 10); // More tokens in catch-up mode
     const tokensWithVolume = [];
 
     // Process sequentially with delays to reduce costs
@@ -1181,14 +1296,14 @@ async function updateHolderCounts() {
       try {
         const transferEventSignature = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
         const fromBlock = Math.max(currentBlock - 50, deployment.blockNumber);
-        const recentLogs = await getLogsInChunks(
-          providerFree,
+        const recentLogs = await smartGetLogs(
           {
             address: deployment.tokenAddress,
             topics: [transferEventSignature]
           },
           fromBlock,
-          currentBlock
+          currentBlock,
+          { usePaid: false } // Try free first, fallback to paid if rate limited
         );
         recentVolume = recentLogs.length;
       } catch (e) {
@@ -1196,8 +1311,8 @@ async function updateHolderCounts() {
       }
       tokensWithVolume.push({ deployment, recentVolume });
 
-      // Add delay between volume checks to reduce costs
-      await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay between checks
+      // Delay between volume checks (faster in catch-up mode)
+      await new Promise(resolve => setTimeout(resolve, CATCH_UP_MODE ? 100 : 500));
     }
 
     // Add remaining tokens with 0 volume (not checked)
@@ -1296,13 +1411,13 @@ async function updateHolderCounts() {
       return t.priority > 0 || (isVeryNew && timeSinceCheck > 300); // Very new tokens can be checked every 5 minutes (increased from 1 min)
     });
 
-    const toUpdate = filteredByCooldown.slice(0, 1).map(t => t.deployment); // Reduced from 5 to 1 to cut costs
+    const toUpdate = filteredByCooldown.slice(0, CATCH_UP_MODE ? 5 : 1).map(t => t.deployment); // More tokens in catch-up mode
 
     // Store volume data for tokens with activity (process sequentially to avoid Supabase rate limits)
     // Only update volume for top priority tokens to reduce costs (limit to 3 tokens max)
     const tokensNeedingVolumeUpdate = tokensWithPriority
       .filter(t => t.recentVolume > 0)
-      .slice(0, 3); // Limit to 3 tokens max (reduced from all tokens)
+      .slice(0, CATCH_UP_MODE ? 10 : 3); // More tokens in catch-up mode
 
     // Process volume updates sequentially with delays to avoid Supabase rate limits
     for (const { deployment, recentVolume } of tokensNeedingVolumeUpdate) {
@@ -1310,6 +1425,8 @@ async function updateHolderCounts() {
         // Calculate actual ETH volume using Trace API for accurate metrics
         const actualVolume = await calculateActualVolume(deployment, currentBlock, currentTimestamp);
 
+        const volume1h = actualVolume.volume1h;
+        const volume6h = actualVolume.volume6h;
         const volume24h = actualVolume.volume24h;
         const volume7d = actualVolume.volume7d;
 
@@ -1330,14 +1447,16 @@ async function updateHolderCounts() {
         }
 
         await updateDeployment(deployment.txHash, {
+          volume1h: volume1h,
+          volume6h: volume6h,
           volume24h: volume24h,
           volume7d: volume7d,
           volumeHistory: newVolumeHistory,
           marketCap: marketCap
         });
 
-        // Delay between updates (increased to reduce costs)
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Increased from 100ms to 1s
+        // Delay between updates (faster in catch-up mode)
+        await new Promise(resolve => setTimeout(resolve, CATCH_UP_MODE ? 200 : 1000));
       } catch (err) {
         console.error(`Error updating volume for ${deployment.tokenName || 'token'}:`, err.message);
         // Continue with next token
@@ -1361,9 +1480,9 @@ async function updateHolderCounts() {
     // Process holder count updates sequentially to avoid rate limits
     // Process one token at a time with delays between them
     for (const deployment of toUpdate) {
-      // Add delay between tokens (increased to reduce costs)
+      // Add delay between tokens (faster in catch-up mode)
       if (toUpdate.indexOf(deployment) > 0) {
-        await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay between tokens (increased from 1s)
+        await new Promise(resolve => setTimeout(resolve, CATCH_UP_MODE ? 1000 : 5000));
       }
 
       await (async () => {
@@ -1386,14 +1505,9 @@ async function updateHolderCounts() {
           }
 
           // Count from Transfer events (more accurate for all holders)
-          // Use free API with 10-block chunks
-          const activeProvider = providerFree;
-
+          // Use smartGetLogs with automatic fallback (free first, paid if rate limited)
           const transferEventSignature = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
           const holders = new Set();
-
-          // Also track addresses that might have zero balance (to verify later with Trace API if needed)
-          const potentialHolders = new Set();
 
           // Smart block range selection: for old tokens, only check recent blocks
           // For new tokens, check all blocks from creation
@@ -1413,76 +1527,40 @@ async function updateHolderCounts() {
             // For now, just check recent blocks and estimate
           }
 
-          // Use free tier 10-block limit
-          const maxBlockRange = FREE_TIER_MAX_BLOCK_RANGE; // 10 blocks for free tier
-
-          // Limit total chunks to avoid rate limits (reduced from 20 to 5 to cut costs)
-          const maxChunks = Math.min(5, Math.ceil((toBlock - checkFromBlock) / maxBlockRange)); // Reduced from 20 to 5
-          let chunkFrom = checkFromBlock;
-          let chunkCount = 0;
-          let rateLimitHit = false;
-          let consecutiveErrors = 0;
-
-          while (chunkFrom < toBlock && chunkCount < maxChunks && !rateLimitHit) {
-            const chunkTo = Math.min(chunkFrom + maxBlockRange, toBlock);
-            try {
-              const logs = await activeProvider.getLogs({
+          // Use smartGetLogs with automatic fallback (tries free first, falls back to paid if rate limited)
+          try {
+            const logs = await smartGetLogs(
+              {
                 address: deployment.tokenAddress,
-                fromBlock: chunkFrom,
-                toBlock: chunkTo,
                 topics: [transferEventSignature]
-              });
+              },
+              checkFromBlock,
+              toBlock,
+              { usePaid: false } // Try free first, fallback to paid if rate limited
+            );
 
-              for (const log of logs) {
-                if (log.topics && log.topics.length >= 3) {
-                  const fromAddr = '0x' + log.topics[1].slice(-40);
-                  const toAddr = '0x' + log.topics[2].slice(-40);
+            // Process all logs
+            for (const log of logs) {
+              if (log.topics && log.topics.length >= 3) {
+                const fromAddr = '0x' + log.topics[1].slice(-40);
+                const toAddr = '0x' + log.topics[2].slice(-40);
 
-                  if (fromAddr !== '0x0000000000000000000000000000000000000000') {
-                    holders.add(fromAddr.toLowerCase());
-                  }
-                  if (toAddr !== '0x0000000000000000000000000000000000000000') {
-                    holders.add(toAddr.toLowerCase());
-                  }
+                if (fromAddr !== '0x0000000000000000000000000000000000000000') {
+                  holders.add(fromAddr.toLowerCase());
+                }
+                if (toAddr !== '0x0000000000000000000000000000000000000000') {
+                  holders.add(toAddr.toLowerCase());
                 }
               }
-
-              consecutiveErrors = 0; // Reset error counter on success
-
-          // Delays between chunks (increased to reduce costs)
-          if (chunkCount > 0) {
-            // Increased delay between chunks to reduce costs
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Increased from 150ms to 1s
-          } else {
-            // Increased delay before first chunk
-            await new Promise(resolve => setTimeout(resolve, 500)); // Increased from 100ms to 500ms
-          }
-            } catch (e) {
-              consecutiveErrors++;
-
-              // If we hit rate limit, stop immediately and wait longer
-              if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('exceeded') || e.message.includes('block range'))) {
-                rateLimitHit = true;
-                console.error(`  ⚠️  Rate limit hit for ${deployment.tokenName || 'token'}, stopping holder check`);
-              // Wait 2 seconds before continuing to next token (faster on paid plan)
-              await new Promise(resolve => setTimeout(resolve, 2000));
-                break;
-              }
-              console.error(`  ⚠️  Error fetching logs for blocks ${chunkFrom}-${chunkTo}:`, e.message);
-
-              // Exponential backoff on errors
-              const errorDelay = Math.min(5000, 1000 * Math.pow(2, consecutiveErrors));
-              await new Promise(resolve => setTimeout(resolve, errorDelay));
-
-              // If too many consecutive errors, stop
-              if (consecutiveErrors >= 3) {
-                rateLimitHit = true;
-                console.error(`  ⚠️  Too many errors for ${deployment.tokenName || 'token'}, stopping`);
-                break;
-              }
             }
-            chunkFrom = chunkTo + 1;
-            chunkCount++;
+          } catch (e) {
+            // If smartGetLogs fails (both free and paid), log and skip
+            if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('exceeded') || e.message.includes('rate limit'))) {
+              console.error(`  ⚠️  Rate limit hit for ${deployment.tokenName || 'token'} (both APIs), skipping holder check`);
+              return; // Skip this token
+            }
+            console.error(`  ⚠️  Error fetching logs for ${deployment.tokenName || 'token'}:`, e.message);
+            throw e; // Re-throw if not rate limit
           }
 
           // For old tokens where we only checked recent blocks, use existing count as base
@@ -1521,11 +1599,7 @@ async function updateHolderCounts() {
             newHolderCount = verifiedHolderCount;
           }
 
-          // If we hit rate limits, don't update (keep existing count)
-          if (rateLimitHit && chunkCount === 0) {
-            // Skip this token entirely if we hit rate limit on first chunk
-            return;
-          }
+          // Rate limit handling is now done in smartGetLogs, so we can proceed
 
           // newHolderCount is already set above based on whether we checked all blocks or just recent
 
@@ -1536,7 +1610,7 @@ async function updateHolderCounts() {
               const tokenContract = new ethers.Contract(deployment.tokenAddress, [
                 'function name() view returns (string)',
                 'function symbol() view returns (string)'
-              ], provider);
+              ], providerFree);
 
               try {
                 updatedTokenName = await tokenContract.name();
@@ -1644,8 +1718,7 @@ async function checkForDevSells() {
         const checkBlocks = 100; // Check last 100 blocks
 
         const fromBlock = Math.max(currentBlock - checkBlocks, deployment.blockNumber);
-        const logs = await getLogsInChunks(
-          providerFree,
+        const logs = await smartGetLogs(
           {
             address: deployment.tokenAddress,
             topics: [
@@ -1654,7 +1727,8 @@ async function checkForDevSells() {
             ]
           },
           fromBlock,
-          currentBlock
+          currentBlock,
+          { usePaid: false } // Try free first, fallback to paid if rate limited
         );
 
         // Check if deployer transferred tokens to someone else (sell)
@@ -1718,9 +1792,8 @@ async function checkForDevTransfers() {
         const transferEventSignature = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
         const fromBlock = Math.max(currentBlock - 100, deployment.blockNumber);
 
-        // Check transfers FROM dev (outgoing)
-        const transfersFrom = await getLogsInChunks(
-          providerFree,
+        // Check transfers FROM dev (outgoing) - use smartGetLogs with automatic fallback
+        const transfersFrom = await smartGetLogs(
           {
             address: deployment.tokenAddress,
             topics: [
@@ -1729,19 +1802,20 @@ async function checkForDevTransfers() {
             ]
           },
           fromBlock,
-          currentBlock
+          currentBlock,
+          { usePaid: false } // Try free first, fallback to paid if rate limited
         );
 
-        // Check transfers TO dev (incoming)
+        // Check transfers TO dev (incoming) - use smartGetLogs with automatic fallback
         // Get all Transfer events and filter for those where 'to' is the dev address
-        const allTransfers = await getLogsInChunks(
-          providerFree,
+        const allTransfers = await smartGetLogs(
           {
             address: deployment.tokenAddress,
             topics: [transferEventSignature] // Only filter by event signature
           },
           fromBlock,
-          currentBlock
+          currentBlock,
+          { usePaid: false } // Try free first, fallback to paid if rate limited
         );
 
         // Filter for transfers TO dev (topics[2] is the 'to' address)

@@ -16,6 +16,8 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
  * Convert database row to deployment object (same format as backend)
  */
 function dbToDeployment(row) {
+  // Safely handle missing columns (graceful degradation)
+  // This allows the frontend to work even if migrations haven't been run yet
   return {
     txHash: row.tx_hash,
     tokenAddress: row.token_address,
@@ -31,14 +33,19 @@ function dbToDeployment(row) {
     holderCount: row.holder_count || 0,
     holderCountHistory: row.holder_count_history || [],
     lastHolderCheck: row.last_holder_check || null,
-    volume24h: parseFloat(row.volume_24h) || 0,
-    volume7d: parseFloat(row.volume_7d) || 0,
+    // New columns (may not exist until migration is run)
+    volume1h: (row.volume_1h != null && row.volume_1h !== undefined) ? parseFloat(row.volume_1h) || 0 : 0,
+    volume6h: (row.volume_6h != null && row.volume_6h !== undefined) ? parseFloat(row.volume_6h) || 0 : 0,
+    // Existing columns (should always exist)
+    volume24h: (row.volume_24h != null && row.volume_24h !== undefined) ? parseFloat(row.volume_24h) || 0 : 0,
+    volume7d: (row.volume_7d != null && row.volume_7d !== undefined) ? parseFloat(row.volume_7d) || 0 : 0,
     volumeHistory: row.volume_history || [],
-    marketCap: parseFloat(row.market_cap) || 0,
+    marketCap: (row.market_cap != null && row.market_cap !== undefined) ? parseFloat(row.market_cap) || 0 : 0,
+    // Dev transfer columns (may not exist until migration is run)
     devTransferCount: row.dev_transfer_count || 0,
-    devTransferredOut: parseFloat(row.dev_transferred_out) || 0,
-    devTransferredIn: parseFloat(row.dev_transferred_in) || 0,
-    devNetTransfer: parseFloat(row.dev_net_transfer) || 0,
+    devTransferredOut: (row.dev_transferred_out != null && row.dev_transferred_out !== undefined) ? parseFloat(row.dev_transferred_out) || 0 : 0,
+    devTransferredIn: (row.dev_transferred_in != null && row.dev_transferred_in !== undefined) ? parseFloat(row.dev_transferred_in) || 0 : 0,
+    devNetTransfer: (row.dev_net_transfer != null && row.dev_net_transfer !== undefined) ? parseFloat(row.dev_net_transfer) || 0 : 0,
     lastTransferCheck: row.last_transfer_check || null,
     links: row.links || {}
   };
@@ -64,6 +71,12 @@ export async function getAllDeployments() {
       throw error;
     }
 
+    if (!data || data.length === 0) {
+      console.warn('No deployments found in database');
+      return [];
+    }
+
+    console.log(`✅ Loaded ${data.length} deployments from database`);
     return data.map(dbToDeployment);
   } catch (error) {
     console.error('Error getting deployments from Supabase:', error);
