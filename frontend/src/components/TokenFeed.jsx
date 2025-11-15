@@ -329,6 +329,7 @@ function TokenFeed({
         const volume1h = d.volume1h || 0;
         const volume6h = d.volume6h || 0;
         const marketCap = d.marketCap || 0;
+        const score = calculateRunnerScore(d).score || 0;
 
         // Never hide tokens less than 5 minutes old (still being processed)
         if (age < 300) {
@@ -339,13 +340,15 @@ function TokenFeed({
         // - Older than 1 hour AND
         // - Has <=5 holders AND
         // - No volume (all volume metrics are 0) AND
-        // - No market cap (or market cap is 0)
+        // - No market cap (or market cap is 0) AND
+        // - Score is 0 or very low (< 0.1)
         const isDead = age > 3600 &&
                       holderCount <= 5 &&
                       volume24h === 0 &&
                       volume1h === 0 &&
                       volume6h === 0 &&
-                      marketCap === 0;
+                      marketCap === 0 &&
+                      score < 0.1;
 
         return !isDead;
       });
