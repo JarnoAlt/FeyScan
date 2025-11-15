@@ -36,17 +36,6 @@ function App() {
   const hasEnoughTokens = tokenBalance && tokenBalance.value >= REQUIRED_BALANCE;
   const hasAccess = isWhitelistedDev || hasEnoughTokens;
 
-  // Different thresholds for different sections
-  const ALERTS_THRESHOLD = 25000000n; // 25M
-  const HOT_RUNNERS_THRESHOLD = 15000000n; // 15M
-  const NEWEST_5_THRESHOLD = 10000000n; // 10M
-  const ALL_DEPLOYMENTS_THRESHOLD = 5000000n; // 5M
-
-  const hasAlertsAccess = isWhitelistedDev || (tokenBalance && tokenBalance.value >= ALERTS_THRESHOLD);
-  const hasHotRunnersAccess = isWhitelistedDev || (tokenBalance && tokenBalance.value >= HOT_RUNNERS_THRESHOLD);
-  const hasNewest5Access = isWhitelistedDev || (tokenBalance && tokenBalance.value >= NEWEST_5_THRESHOLD);
-  const hasAllDeploymentsAccess = isWhitelistedDev || (tokenBalance && tokenBalance.value >= ALL_DEPLOYMENTS_THRESHOLD);
-
   const playDeploymentSound = () => {
     if (isMuted) return;
 
@@ -103,34 +92,23 @@ function App() {
       }
 
       // Check for new deployments (not seen before)
-      // Only check if we already have seen deployments (to avoid beeping on initial load)
       if (seenDeployments.size > 0 && newDeployments.length > 0) {
-        const newDeploymentHashes = new Set();
         newDeployments.forEach(deployment => {
           if (deployment.txHash && !seenDeployments.has(deployment.txHash)) {
             // New deployment detected!
-            newDeploymentHashes.add(deployment.txHash);
+            playDeploymentSound();
           }
         });
-
-        // Only play sound once if there are truly new deployments
-        if (newDeploymentHashes.size > 0) {
-          console.log(`🔔 New deployment(s) detected: ${newDeploymentHashes.size} new token(s)`);
-          playDeploymentSound();
-        }
       }
 
-      // Update seen deployments AFTER checking for new ones
-      // Use functional update to ensure we're working with the latest state
-      setSeenDeployments(prevSeen => {
-        const newSeenSet = new Set(prevSeen);
-        newDeployments.forEach(deployment => {
-          if (deployment.txHash) {
-            newSeenSet.add(deployment.txHash);
-          }
-        });
-        return newSeenSet;
+      // Update seen deployments
+      const newSeenSet = new Set(seenDeployments);
+      newDeployments.forEach(deployment => {
+        if (deployment.txHash) {
+          newSeenSet.add(deployment.txHash);
+        }
       });
+      setSeenDeployments(newSeenSet);
 
       setDeployments(newDeployments);
       setError(null);
@@ -184,10 +162,10 @@ function App() {
     // Initial fetch
     fetchDeployments();
 
-    // Poll every 15 seconds for live updates (reduced frequency to avoid excessive API calls)
+    // Poll every 5 seconds for live updates
     const interval = setInterval(() => {
       fetchDeployments();
-    }, 15000);
+    }, 5000);
 
     // Check health every 30 seconds
     const healthInterval = setInterval(() => {
@@ -204,20 +182,54 @@ function App() {
     <div className="App">
       <header className="App-header">
         <div className="header-content">
-                <div className="header-main">
-                  <div className="title-row">
-                    <img src={feyLogo} alt="Fey Scanner" className="fey-logo" />
-                    <h1>Fey Token Launchpad Monitor</h1>
-                    <div className={`status-indicator ${dbStatus}`} title={dbStatus === 'online' ? 'Database Online' : 'Database Offline'}>
-                      <span className="status-dot"></span>
-                      <span className="status-text">{dbStatus === 'online' ? 'Online' : dbStatus === 'offline' ? 'Offline' : 'Checking...'}</span>
-                    </div>
-                    <div className="wallet-connect-wrapper">
-                      <WalletConnect />
-                    </div>
-                  </div>
-            <p className="subtitle">Live monitoring of token deployments on Base Network</p>
+
+          {/* *** CHANGED *** */}
+          <div className="header-top">
+            <div className="brand-row">
+              <img src={feyLogo} alt="Fey Scanner" className="fey-logo" />
+              <span className="brand-title">FEYSCAN</span>
+            </div>
+            <div
+              className="wallet-connect-wrapper"
+              style={{ transform: 'scale(0.8)', transformOrigin: 'top right' }} // *** CHANGED ***
+            >
+              <WalletConnect />
+            </div>
+          </div>
+          {/* *** END CHANGED *** */}
+
+          <div className="header-main">
+            {/* *** CHANGED *** */}
+            <div className="monitor-section">
+              <h1 className="monitor-title">Fey Token Launchpad Monitor</h1>
+              <div
+                className={`status-indicator ${dbStatus} status-below-title`}
+                title={dbStatus === 'online' ? 'Database Online' : 'Database Offline'}
+              >
+                <span className="status-dot"></span>
+                <span className="status-text">
+                  {dbStatus === 'online'
+                    ? 'Online'
+                    : dbStatus === 'offline'
+                    ? 'Offline'
+                    : 'Checking...'}
+                </span>
+              </div>
+            </div>
+
+            <p className="subtitle">
+              Live monitoring of token deployments on Base Network &mdash; track fresh launches,
+              holder trends, and dev activity from the Fey launchpad in real time.
+            </p>
+            {/* *** END CHANGED *** */}
+
+            {/* *** CHANGED *** */}
             <div className="buy-section">
+              <div className="token-hub-header">
+                <h2 className="token-hub-title">Token Hub</h2>
+                <p className="token-hub-subtitle">Buy FeyScan ($FSCN)</p>
+              </div>
+
               <div className="buy-buttons">
                 <a
                   href="https://app.uniswap.org/#/tokens/base/0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659"
@@ -235,28 +247,34 @@ function App() {
                 >
                   📊 Trade Page
                 </a>
-                <button
-                  className="buy-button copy-button"
-                  onClick={() => {
-                    navigator.clipboard.writeText('0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659');
-                    alert('Token address copied!');
-                  }}
-                  title="Copy token address"
+                <a
+                  href="https://basescan.org/token/0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="buy-button tertiary"
                 >
-                  📋 Copy Address
-                </button>
+                  🔍 Explorer
+                </a>
               </div>
-              <div className="token-address-display">
-                <span className="token-label">FeyScan Token:</span>
-                <code className="token-address-code" onClick={() => {
+
+              <button
+                className="token-address-display"
+                onClick={() => {
                   navigator.clipboard.writeText('0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659');
                   alert('Token address copied!');
-                }}>
-                  0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659
+                }}
+                title="Click to copy token address"
+              >
+                <span className="token-label">FeyScan Token</span>
+                <code className="token-address-code">
+                  0x1a013768E7c5…0f0659
                 </code>
-              </div>
+                <span className="token-copy-hint">Tap to copy</span>
+              </button>
             </div>
+            {/* *** END CHANGED *** */}
           </div>
+
           <div className="donation-section">
             <div
               className="donation-header clickable"
@@ -274,10 +292,13 @@ function App() {
                 <div className="donation-wallet">
                   <div className="wallet-info">
                     <span className="wallet-label">Send to:</span>
-                    <code className="wallet-address" onClick={() => {
-                      navigator.clipboard.writeText('0x8DFBdEEC8c5d4970BB5F481C6ec7f73fa1C65be5');
-                      alert('Wallet address copied!');
-                    }}>
+                    <code
+                      className="wallet-address"
+                      onClick={() => {
+                        navigator.clipboard.writeText('0x8DFBdEEC8c5d4970BB5F481C6ec7f73fa1C65be5');
+                        alert('Wallet address copied!');
+                      }}
+                    >
                       ionoi.eth
                     </code>
                     <button
@@ -348,10 +369,6 @@ function App() {
             serverStatus={dbStatus}
             hasEnoughTokens={hasEnoughTokens}
             hasAccess={hasAccess}
-            hasAlertsAccess={hasAlertsAccess}
-            hasHotRunnersAccess={hasHotRunnersAccess}
-            hasNewest5Access={hasNewest5Access}
-            hasAllDeploymentsAccess={hasAllDeploymentsAccess}
             onMuteChange={setIsMuted}
           />
         )}
@@ -446,4 +463,3 @@ function App() {
 }
 
 export default App;
-
