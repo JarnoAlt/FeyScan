@@ -204,20 +204,54 @@ function App() {
     <div className="App">
       <header className="App-header">
         <div className="header-content">
-                <div className="header-main">
-                  <div className="title-row">
-                    <img src={feyLogo} alt="Fey Scanner" className="fey-logo" />
-                    <h1>Fey Token Launchpad Monitor</h1>
-                    <div className={`status-indicator ${dbStatus}`} title={dbStatus === 'online' ? 'Database Online' : 'Database Offline'}>
-                      <span className="status-dot"></span>
-                      <span className="status-text">{dbStatus === 'online' ? 'Online' : dbStatus === 'offline' ? 'Offline' : 'Checking...'}</span>
-                    </div>
-                    <div className="wallet-connect-wrapper">
-                      <WalletConnect />
-                    </div>
-                  </div>
-            <p className="subtitle">Live monitoring of token deployments on Base Network</p>
+
+          {/* *** CHANGED *** */}
+          <div className="header-top">
+            <div className="brand-row">
+              <img src={feyLogo} alt="Fey Scanner" className="fey-logo" />
+              <span className="brand-title">FEYSCAN</span>
+            </div>
+            <div
+              className="wallet-connect-wrapper"
+              style={{ transform: 'scale(0.8)', transformOrigin: 'top right' }} // *** CHANGED ***
+            >
+              <WalletConnect />
+            </div>
+          </div>
+          {/* *** END CHANGED *** */}
+
+          <div className="header-main">
+            {/* *** CHANGED *** */}
+            <div className="monitor-section">
+              <h1 className="monitor-title">Fey Token Launchpad Monitor</h1>
+              <div
+                className={`status-indicator ${dbStatus} status-below-title`}
+                title={dbStatus === 'online' ? 'Database Online' : 'Database Offline'}
+              >
+                <span className="status-dot"></span>
+                <span className="status-text">
+                  {dbStatus === 'online'
+                    ? 'Online'
+                    : dbStatus === 'offline'
+                    ? 'Offline'
+                    : 'Checking...'}
+                </span>
+              </div>
+            </div>
+
+            <p className="subtitle">
+              Live monitoring of token deployments on Base Network &mdash; track fresh launches,
+              holder trends, and dev activity from the Fey launchpad in real time.
+            </p>
+            {/* *** END CHANGED *** */}
+
+            {/* *** CHANGED *** */}
             <div className="buy-section">
+              <div className="token-hub-header">
+                <h2 className="token-hub-title">Token Hub</h2>
+                <p className="token-hub-subtitle">Buy FeyScan ($FSCN)</p>
+              </div>
+
               <div className="buy-buttons">
                 <a
                   href="https://app.uniswap.org/#/tokens/base/0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659"
@@ -235,28 +269,34 @@ function App() {
                 >
                   📊 Trade Page
                 </a>
-                <button
-                  className="buy-button copy-button"
-                  onClick={() => {
-                    navigator.clipboard.writeText('0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659');
-                    alert('Token address copied!');
-                  }}
-                  title="Copy token address"
+                <a
+                  href="https://basescan.org/token/0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="buy-button tertiary"
                 >
-                  📋 Copy Address
-                </button>
+                  🔍 Explorer
+                </a>
               </div>
-              <div className="token-address-display">
-                <span className="token-label">FeyScan Token:</span>
-                <code className="token-address-code" onClick={() => {
+
+              <button
+                className="token-address-display"
+                onClick={() => {
                   navigator.clipboard.writeText('0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659');
                   alert('Token address copied!');
-                }}>
-                  0x1a013768E7c572d6F7369a3e5bC9b29b0a0f0659
+                }}
+                title="Click to copy token address"
+              >
+                <span className="token-label">FeyScan Token</span>
+                <code className="token-address-code">
+                  0x1a013768E7c5…0f0659
                 </code>
-              </div>
+                <span className="token-copy-hint">Tap to copy</span>
+              </button>
             </div>
+            {/* *** END CHANGED *** */}
           </div>
+
           <div className="donation-section">
             <div
               className="donation-header clickable"
@@ -446,4 +486,3 @@ function App() {
 }
 
 export default App;
-
