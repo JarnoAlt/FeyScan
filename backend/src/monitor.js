@@ -32,10 +32,18 @@ const BASE_RPC_PAID = ALCHEMY_API_KEY_PAID
   ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY_PAID}`
   : BASE_RPC_FREE; // Fallback to free if paid not available
 
-// CATCH-UP MODE: Set to true to speed up temporarily, then set back to false
-const CATCH_UP_MODE = process.env.CATCH_UP_MODE === 'true' || true; // TEMPORARY: Set to false after catch-up
+// CATCH-UP MODE: Automatically enabled, will auto-disable when catch-up is complete
+// Can be forced via environment variable: CATCH_UP_MODE=false to disable, CATCH_UP_MODE=true to force enable
+let CATCH_UP_MODE = process.env.CATCH_UP_MODE !== 'false'; // Default to true unless explicitly disabled
+let POLL_INTERVAL = CATCH_UP_MODE ? 15000 : 90000; // 15s in catch-up mode, 90s normally
 
-const POLL_INTERVAL = CATCH_UP_MODE ? 15000 : 90000; // 15s in catch-up mode, 90s normally
+// Track catch-up completion (auto-disable after 3 consecutive cycles with low work)
+let catchUpLowWorkCycles = 0;
+const CATCH_UP_AUTO_DISABLE_THRESHOLD = 3; // Disable after 3 cycles with minimal work
+
+// Volume threshold: Skip tokens with volume below this (in ETH)
+// Set via environment variable or use default
+const MIN_VOLUME_THRESHOLD = parseFloat(process.env.MIN_VOLUME_THRESHOLD) || 1.0; // Default: 1 ETH
 const ETHERSCAN_API_URL = 'https://api.basescan.org/api';
 const ALCHEMY_TRACE_URL = ALCHEMY_API_KEY_PAID
   ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY_PAID}`
@@ -89,14 +97,15 @@ export async function startMonitoring() {
     console.log(`  Paid API: ${paidStatus} (for trace/large ranges only)`);
     if (CATCH_UP_MODE) {
       console.log(`⚡ CATCH-UP MODE ENABLED - Running at 6x speed (${POLL_INTERVAL/1000}s intervals)`);
-      console.log(`⚠️  Processing ${CATCH_UP_MODE ? 5 : 1} holder checks and ${CATCH_UP_MODE ? 10 : 3} volume updates per cycle`);
-      console.log(`⚠️  Remember to set CATCH_UP_MODE = false after catch-up is complete!`);
+      console.log(`⚠️  Processing ${CATCH_UP_MODE ? 3 : 1} holder checks and ${CATCH_UP_MODE ? 5 : 3} volume updates per cycle`);
+      console.log(`✅ Will automatically disable when catch-up is complete (after 3 cycles with minimal work)`);
     }
+    console.log(`📊 Volume threshold: ${MIN_VOLUME_THRESHOLD} ETH (tokens below this will be skipped)`);
 
     // Get current block (use free API)
     const currentBlock = await providerFree.getBlockNumber();
 
-    // Load saved state (last checked block)
+    // Load saved state (last checked block and catch-up status)
     const savedState = await loadMonitorState();
     if (savedState.lastCheckedBlock) {
       lastCheckedBlock = savedState.lastCheckedBlock;
@@ -116,8 +125,15 @@ export async function startMonitoring() {
       await backfillHistory(currentBlock - 500, currentBlock);
     }
 
+    // Check if catch-up was previously completed
+    if (savedState.catchUpComplete === true) {
+      CATCH_UP_MODE = false;
+      POLL_INTERVAL = 90000;
+      console.log('✅ Catch-up mode was previously completed. Running in normal mode.');
+    }
+
     // Save initial state
-    await saveMonitorState({ lastCheckedBlock });
+    await saveMonitorState({ lastCheckedBlock, catchUpComplete: !CATCH_UP_MODE });
     console.log('Backfill complete. Starting live monitoring...\n');
 
     isMonitoring = true;
@@ -173,10 +189,15 @@ export async function backfillHistory(fromBlock, toBlock) {
 async function monitorLoop() {
   if (!isMonitoring) return;
 
+  const cycleStart = Date.now();
   try {
+    console.log(`\n🔄 [${new Date().toLocaleTimeString()}] Starting monitoring cycle...`);
     await checkForNewDeployments();
+    const cycleDuration = ((Date.now() - cycleStart) / 1000).toFixed(1);
+    console.log(`✅ Cycle complete in ${cycleDuration}s. Next cycle in ${POLL_INTERVAL / 1000}s...`);
   } catch (error) {
-    console.error('Error in monitoring loop:', error);
+    console.error('❌ Error in monitoring loop:', error);
+    console.error('Stack:', error.stack);
   }
 
   // Schedule next check
@@ -250,6 +271,10 @@ async function checkForNewDeployments() {
   }
 }
 
+// Rate limit tracking
+let lastRateLimitHit = 0;
+let consecutiveRateLimits = 0;
+
 /**
  * Helper function to get logs in chunks (for free tier 10-block limit)
  */
@@ -257,20 +282,53 @@ async function getLogsInChunks(provider, filter, fromBlock, toBlock, maxBlockRan
   const allLogs = [];
   for (let blockNum = fromBlock; blockNum <= toBlock; blockNum += maxBlockRange) {
     const endBlock = Math.min(blockNum + maxBlockRange - 1, toBlock);
-    try {
-      const logs = await provider.getLogs({
-        ...filter,
-        fromBlock: blockNum,
-        toBlock: endBlock
-      });
-      allLogs.push(...logs);
-      // Delay between chunks (faster in catch-up mode)
-      if (endBlock < toBlock) {
-        await new Promise(resolve => setTimeout(resolve, CATCH_UP_MODE ? 50 : 200));
+    let retries = 3;
+    let success = false;
+    
+    while (retries > 0 && !success) {
+      try {
+        // If we've hit rate limits recently, add extra delay
+        const timeSinceRateLimit = Date.now() - lastRateLimitHit;
+        if (timeSinceRateLimit < 10000) { // Within last 10 seconds
+          const backoffDelay = Math.min(consecutiveRateLimits * 1000, 5000); // Up to 5 seconds
+          console.log(`  ⏳ Rate limit backoff: waiting ${backoffDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
+        }
+        
+        const logs = await provider.getLogs({
+          ...filter,
+          fromBlock: blockNum,
+          toBlock: endBlock
+        });
+        allLogs.push(...logs);
+        success = true;
+        consecutiveRateLimits = 0; // Reset on success
+        
+        // Delay between chunks (increased to avoid rate limits)
+        if (endBlock < toBlock) {
+          const baseDelay = CATCH_UP_MODE ? 200 : 500; // Increased from 50/200
+          await new Promise(resolve => setTimeout(resolve, baseDelay));
+        }
+      } catch (error) {
+        const isRateLimit = error.message && (
+          error.message.includes('429') ||
+          error.message.includes('compute units') ||
+          error.message.includes('exceeded') ||
+          error.message.includes('rate limit')
+        );
+        
+        if (isRateLimit) {
+          lastRateLimitHit = Date.now();
+          consecutiveRateLimits++;
+          const backoffTime = Math.min(consecutiveRateLimits * 2000, 10000); // Exponential backoff up to 10s
+          console.error(`  ⚠️  Rate limit hit (${consecutiveRateLimits}x). Waiting ${backoffTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+          retries--;
+        } else {
+          console.error(`Error fetching logs for blocks ${blockNum}-${endBlock}:`, error.message);
+          break; // Non-rate-limit error, don't retry
+        }
       }
-    } catch (error) {
-      console.error(`Error fetching logs for blocks ${blockNum}-${endBlock}:`, error.message);
-      // Continue with next chunk
     }
   }
   return allLogs;
@@ -279,7 +337,7 @@ async function getLogsInChunks(provider, filter, fromBlock, toBlock, maxBlockRan
 /**
  * Smart RPC call with automatic fallback: Try free API first, fallback to paid on rate limit
  */
-async function smartRpcCall(operation, usePaid = false) {
+async function smartRpcCall(operation, usePaid = false, retries = 2) {
   // If operation requires paid (trace API, large ranges), use paid directly
   if (usePaid) {
     if (!providerPaid || !ALCHEMY_API_KEY_PAID) {
@@ -303,18 +361,42 @@ async function smartRpcCall(operation, usePaid = false) {
       error.message.includes('quota')
     );
 
-    if (isRateLimit && providerPaid && ALCHEMY_API_KEY_PAID) {
-      console.log(`  ⚠️  Free API rate limited, falling back to paid API`);
-      // Fallback to paid API
-      try {
-        return await operation(providerPaid);
-      } catch (paidError) {
-        console.error(`  ❌ Paid API also failed:`, paidError.message);
-        throw paidError;
+    if (isRateLimit) {
+      lastRateLimitHit = Date.now();
+      consecutiveRateLimits++;
+      
+      // If we have paid API, try it with backoff
+      if (providerPaid && ALCHEMY_API_KEY_PAID && retries > 0) {
+        const backoffTime = Math.min(consecutiveRateLimits * 1000, 5000);
+        console.log(`  ⚠️  Free API rate limited (${consecutiveRateLimits}x). Waiting ${backoffTime}ms before paid fallback...`);
+        await new Promise(resolve => setTimeout(resolve, backoffTime));
+        
+        try {
+          return await operation(providerPaid);
+        } catch (paidError) {
+          // If paid also rate limited, wait longer and retry
+          if (paidError.message && paidError.message.includes('429')) {
+            const longerBackoff = Math.min(consecutiveRateLimits * 2000, 10000);
+            console.log(`  ⚠️  Paid API also rate limited. Waiting ${longerBackoff}ms...`);
+            await new Promise(resolve => setTimeout(resolve, longerBackoff));
+            
+            if (retries > 0) {
+              return await smartRpcCall(operation, usePaid, retries - 1);
+            }
+          }
+          console.error(`  ❌ Paid API also failed:`, paidError.message);
+          throw paidError;
+        }
+      } else {
+        // No paid API or out of retries - wait and throw
+        const backoffTime = Math.min(consecutiveRateLimits * 2000, 10000);
+        console.log(`  ⚠️  Rate limited. Waiting ${backoffTime}ms...`);
+        await new Promise(resolve => setTimeout(resolve, backoffTime));
+        throw error;
       }
     }
 
-    // If not rate limit or no paid API, throw original error
+    // If not rate limit, throw original error
     throw error;
   }
 }
@@ -1263,8 +1345,17 @@ async function updateHolderCounts() {
       const tokenName = (d.tokenName || '').trim();
       if (KNOWN_TOKEN_NAMES.has(tokenName.toUpperCase())) return false;
 
-      // Prune tokens: if token is >1 hour old and has <=5 holders, stop checking
+      // Volume threshold filter: Skip tokens with volume below threshold
+      // Only apply to tokens older than 1 hour (give new tokens a chance)
       const age = currentTimestamp - d.timestamp;
+      if (age > 3600) {
+        const volume24h = d.volume24h || 0;
+        if (volume24h < MIN_VOLUME_THRESHOLD) {
+          return false; // Skip low-volume tokens
+        }
+      }
+
+      // Prune tokens: if token is >1 hour old and has <=5 holders, stop checking
       const isPruned = d.isPruned || false;
       if (isPruned) return false; // Already pruned
 
@@ -1411,17 +1502,58 @@ async function updateHolderCounts() {
       return t.priority > 0 || (isVeryNew && timeSinceCheck > 300); // Very new tokens can be checked every 5 minutes (increased from 1 min)
     });
 
-    const toUpdate = filteredByCooldown.slice(0, CATCH_UP_MODE ? 5 : 1).map(t => t.deployment); // More tokens in catch-up mode
+    // Reduce tokens per cycle if we're hitting rate limits
+    const maxTokens = consecutiveRateLimits > 3 ? 1 : (CATCH_UP_MODE ? 3 : 1); // Reduced from 5 to 3 in catch-up mode
+    const toUpdate = filteredByCooldown.slice(0, maxTokens).map(t => t.deployment);
 
     // Store volume data for tokens with activity (process sequentially to avoid Supabase rate limits)
     // Only update volume for top priority tokens to reduce costs (limit to 3 tokens max)
+    // Also filter by volume threshold: skip tokens that already have volume data below threshold
     const tokensNeedingVolumeUpdate = tokensWithPriority
-      .filter(t => t.recentVolume > 0)
-      .slice(0, CATCH_UP_MODE ? 10 : 3); // More tokens in catch-up mode
+      .filter(t => {
+        // Skip if no recent activity
+        if (t.recentVolume === 0) return false;
+
+        // If token already has volume data, check threshold
+        const existingVolume = t.deployment.volume24h || 0;
+        const age = currentTimestamp - t.deployment.timestamp;
+
+        // For tokens older than 1 hour, apply volume threshold
+        if (age > 3600 && existingVolume < MIN_VOLUME_THRESHOLD) {
+          return false; // Skip low-volume tokens
+        }
+
+        return true;
+      })
+      .slice(0, consecutiveRateLimits > 3 ? 3 : (CATCH_UP_MODE ? 5 : 3)); // Reduced from 10 to 5 in catch-up mode
+
+    // Auto-disable catch-up mode if we have minimal work for several cycles
+    if (CATCH_UP_MODE) {
+      const totalWork = toUpdate.length + tokensNeedingVolumeUpdate.length;
+      if (totalWork <= 2) { // Very little work (2 or fewer tokens)
+        catchUpLowWorkCycles++;
+        if (catchUpLowWorkCycles >= CATCH_UP_AUTO_DISABLE_THRESHOLD) {
+          CATCH_UP_MODE = false;
+          POLL_INTERVAL = 90000;
+          catchUpLowWorkCycles = 0;
+          console.log('\n🎉 CATCH-UP MODE AUTO-DISABLED: Minimal work detected for 3+ cycles.');
+          console.log('   Switching to normal mode (90s intervals) to reduce costs.');
+          console.log('   To re-enable catch-up mode, set CATCH_UP_MODE=true or restart.\n');
+          // Save state
+          await saveMonitorState({ lastCheckedBlock, catchUpComplete: true });
+        } else {
+          console.log(`  ⏳ Catch-up mode: ${catchUpLowWorkCycles}/${CATCH_UP_AUTO_DISABLE_THRESHOLD} cycles with minimal work (${totalWork} tokens)`);
+        }
+      } else {
+        catchUpLowWorkCycles = 0; // Reset counter if we have work
+      }
+    }
 
     // Process volume updates sequentially with delays to avoid Supabase rate limits
-    for (const { deployment, recentVolume } of tokensNeedingVolumeUpdate) {
+    for (let i = 0; i < tokensNeedingVolumeUpdate.length; i++) {
+      const { deployment, recentVolume } = tokensNeedingVolumeUpdate[i];
       try {
+        console.log(`  📊 Updating volume ${i + 1}/${tokensNeedingVolumeUpdate.length}: ${deployment.tokenName || 'Unknown'}`);
         // Calculate actual ETH volume using Trace API for accurate metrics
         const actualVolume = await calculateActualVolume(deployment, currentBlock, currentTimestamp);
 
@@ -1429,6 +1561,15 @@ async function updateHolderCounts() {
         const volume6h = actualVolume.volume6h;
         const volume24h = actualVolume.volume24h;
         const volume7d = actualVolume.volume7d;
+
+        // Only update if volume meets threshold (for tokens older than 1 hour)
+        const age = currentTimestamp - deployment.timestamp;
+        const shouldUpdate = age <= 3600 || volume24h >= MIN_VOLUME_THRESHOLD;
+
+        if (!shouldUpdate) {
+          console.log(`    ⏭️  Skipping ${deployment.tokenName || 'token'}: volume ${volume24h.toFixed(3)} ETH < ${MIN_VOLUME_THRESHOLD} ETH threshold`);
+          continue; // Skip to next token
+        }
 
         // Get existing volume history
         const volumeHistory = deployment.volumeHistory || [];
@@ -1479,12 +1620,18 @@ async function updateHolderCounts() {
 
     // Process holder count updates sequentially to avoid rate limits
     // Process one token at a time with delays between them
-    for (const deployment of toUpdate) {
+    for (let i = 0; i < toUpdate.length; i++) {
+      const deployment = toUpdate[i];
       // Add delay between tokens (faster in catch-up mode)
-      if (toUpdate.indexOf(deployment) > 0) {
+      if (i > 0) {
+        console.log(`  ⏳ Processing token ${i + 1}/${toUpdate.length}...`);
         await new Promise(resolve => setTimeout(resolve, CATCH_UP_MODE ? 1000 : 5000));
+      } else {
+        console.log(`  ⏳ Processing token ${i + 1}/${toUpdate.length}...`);
       }
 
+      const tokenName = deployment.tokenName || deployment.tokenAddress?.slice(0, 10) || 'Unknown';
+      console.log(`    🔍 Checking holders for ${tokenName}...`);
       await (async () => {
         try {
           let newHolderCount = 0;
