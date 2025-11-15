@@ -20,10 +20,37 @@
   flex-wrap: wrap;
 }
 
+/* *** CHANGED: new top bar (logo + FEYSCAN + connect) *** */
+.header-top {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brand-title {
+  color: #16a34a;
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+/* *** END CHANGED *** */
+
 .header-main {
   flex: 1;
   text-align: center;
   min-width: 300px;
+  /* *** CHANGED: nudge main section down a bit *** */
+  margin-top: 0.5rem;
 }
 
 .title-row {
@@ -47,6 +74,28 @@
   font-weight: 700;
   text-shadow: 0 0 8px rgba(22, 163, 74, 0.3);
 }
+
+/* *** CHANGED: monitor title + status stack *** */
+.monitor-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.monitor-title {
+  font-size: 2.3rem;
+  margin: 0;
+  color: #16a34a;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(22, 163, 74, 0.3);
+}
+
+.status-below-title {
+  margin-top: 0.25rem;
+}
+/* *** END CHANGED *** */
 
 .status-indicator {
   display: flex;
@@ -113,6 +162,7 @@
   opacity: 0.8;
 }
 
+/* *** CHANGED: Token Hub + buttons layout *** */
 /* Buy Section */
 .buy-section {
   margin-top: 1rem;
@@ -121,6 +171,29 @@
   gap: 0.75rem;
   align-items: center;
   width: 100%;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.token-hub-header {
+  text-align: center;
+}
+
+.token-hub-title {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #16a34a;
+  opacity: 0.9;
+}
+
+.token-hub-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: #bbf7d0;
+  opacity: 0.9;
 }
 
 .buy-buttons {
@@ -180,6 +253,21 @@
   box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
+.buy-button.tertiary {
+  background: #020617;
+  color: #bbf7d0;
+  border-color: #22c55e;
+  flex: 0 0 auto;
+  min-width: 130px;
+}
+
+.buy-button.tertiary:hover {
+  background: #22c55e;
+  color: #000000;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+}
+
 .buy-button.copy-button {
   background: #000000;
   color: #16a34a;
@@ -196,6 +284,7 @@
   box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
+/* token-address-display is now a button */
 .token-address-display {
   display: flex;
   align-items: center;
@@ -204,6 +293,17 @@
   justify-content: center;
   color: #16a34a;
   font-size: 0.875rem;
+  background: #020617;
+  border-radius: 999px;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid #16a34a;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.token-address-display:hover {
+  background: #020617;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35);
 }
 
 .token-label {
@@ -212,11 +312,11 @@
 }
 
 .token-address-code {
-  background: #000000;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  color: #16a34a;
-  border: 1px solid #16a34a;
+  background: transparent;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  color: #bbf7d0;
+  border: 1px solid rgba(22, 163, 74, 0.5);
   cursor: pointer;
   transition: all 0.2s;
   font-size: 0.875rem;
@@ -228,6 +328,13 @@
   color: #000000;
   transform: scale(1.05);
 }
+
+/* *** CHANGED: small "Tap to copy" hint under address *** */
+.token-copy-hint {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+/* *** END CHANGED *** */
 
 /* Donation Section */
 .donation-section {
@@ -523,7 +630,8 @@
     padding: 1rem;
   }
 
-  .App-header h1 {
+  .App-header h1,
+  .monitor-title {
     font-size: 1.5rem;
   }
 
@@ -621,7 +729,8 @@
     padding: 1.5rem;
   }
 
-  .App-header h1 {
+  .App-header h1,
+  .monitor-title {
     font-size: 2rem;
   }
 
@@ -805,4 +914,3 @@
   background: #ef4444;
   color: #000000;
 }
-
