@@ -26,6 +26,29 @@
   min-width: 300px;
 }
 
+/* *** CHANGED: new top bar for logo + FEYSCAN + wallet *** */
+.header-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brand-title {
+  color: #16a34a;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 .title-row {
   display: flex;
   align-items: center;
@@ -58,6 +81,12 @@
   font-weight: 600;
   background: #000000;
   border: 1px solid #16a34a;
+}
+
+/* *** CHANGED: status centered under monitor title *** */
+.status-below-title {
+  margin: 0.75rem auto 0;
+  justify-content: center;
 }
 
 .status-indicator.online {
@@ -123,6 +152,24 @@
   width: 100%;
 }
 
+/* *** CHANGED: token hub heading styles *** */
+.token-hub-header {
+  text-align: center;
+}
+
+.token-hub-title {
+  color: #16a34a;
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.1rem;
+}
+
+.token-hub-subtitle {
+  color: #16a34a;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
 .buy-buttons {
   display: flex;
   gap: 0.75rem;
@@ -180,6 +227,22 @@
   box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
+/* *** CHANGED: explorer button variant *** */
+.buy-button.tertiary {
+  background: #000000;
+  color: #16a34a;
+  border-color: #16a34a;
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+
+.buy-button.tertiary:hover {
+  background: #111827;
+  color: #22c55e;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+}
+
 .buy-button.copy-button {
   background: #000000;
   color: #16a34a;
@@ -196,14 +259,27 @@
   box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 
+/* *** CHANGED: clickable token hub address pill *** */
 .token-address-display {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
   justify-content: center;
   color: #16a34a;
   font-size: 0.875rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 999px;
+  background: #000000;
+  border: 1px solid #16a34a;
+  cursor: pointer;
+  transition: all 0.2s;
+  max-width: 600px;
+}
+
+.token-address-display:hover {
+  background: #020617;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35);
 }
 
 .token-label {
@@ -229,7 +305,12 @@
   transform: scale(1.05);
 }
 
-/* Donation Section */
+/* *** CHANGED: small hint under address *** */
+.token-copy-hint {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
 .donation-section {
   background: #000000;
   border: 2px solid #16a34a;
@@ -805,4 +886,3 @@
   background: #ef4444;
   color: #000000;
 }
-
