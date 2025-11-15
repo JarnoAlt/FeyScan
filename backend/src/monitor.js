@@ -35,7 +35,7 @@ const BASE_RPC_PAID = ALCHEMY_API_KEY_PAID
 // CATCH-UP MODE: Automatically enabled, will auto-disable when catch-up is complete
 // Can be forced via environment variable: CATCH_UP_MODE=false to disable, CATCH_UP_MODE=true to force enable
 let CATCH_UP_MODE = process.env.CATCH_UP_MODE !== 'false'; // Default to true unless explicitly disabled
-let POLL_INTERVAL = CATCH_UP_MODE ? 15000 : 90000; // 15s in catch-up mode, 90s normally
+let POLL_INTERVAL = CATCH_UP_MODE ? 100 : 90000; // 0.1s in catch-up mode, 90s normally
 
 // Track catch-up completion (auto-disable after 3 consecutive cycles with low work)
 let catchUpLowWorkCycles = 0;
@@ -96,8 +96,8 @@ export async function startMonitoring() {
     console.log(`  Free API: ${freeStatus}`);
     console.log(`  Paid API: ${paidStatus} (for trace/large ranges only)`);
     if (CATCH_UP_MODE) {
-      console.log(`⚡ CATCH-UP MODE ENABLED - Running at 6x speed (${POLL_INTERVAL/1000}s intervals)`);
-      console.log(`⚠️  Processing ${CATCH_UP_MODE ? 3 : 1} holder checks and ${CATCH_UP_MODE ? 5 : 3} volume updates per cycle`);
+      console.log(`⚡ CATCH-UP MODE ENABLED - Running at maximum speed (${POLL_INTERVAL}ms intervals)`);
+      console.log(`⚠️  Processing ${CATCH_UP_MODE ? 10 : 1} holder checks and ${CATCH_UP_MODE ? 15 : 3} volume updates per cycle`);
       console.log(`✅ Will automatically disable when catch-up is complete (after 3 cycles with minimal work)`);
     }
     console.log(`📊 Volume threshold: ${MIN_VOLUME_THRESHOLD} ETH (tokens below this will be skipped)`);
@@ -184,20 +184,40 @@ export async function backfillHistory(fromBlock, toBlock) {
 }
 
 /**
- * Main monitoring loop
+ * Main monitoring loop with overall timeout protection
  */
 async function monitorLoop() {
   if (!isMonitoring) return;
 
   const cycleStart = Date.now();
+  const CYCLE_TIMEOUT = 120000; // 2 minute max per cycle to prevent infinite hangs
+
   try {
     console.log(`\n🔄 [${new Date().toLocaleTimeString()}] Starting monitoring cycle...`);
-    await checkForNewDeployments();
+
+    // Wrap the entire cycle in a timeout
+    await Promise.race([
+      checkForNewDeployments(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Monitoring cycle timeout after 2 minutes')), CYCLE_TIMEOUT)
+      )
+    ]);
+
     const cycleDuration = ((Date.now() - cycleStart) / 1000).toFixed(1);
-    console.log(`✅ Cycle complete in ${cycleDuration}s. Next cycle in ${POLL_INTERVAL / 1000}s...`);
+    if (CATCH_UP_MODE) {
+      console.log(`✅ Cycle complete in ${cycleDuration}s. Next cycle in ${POLL_INTERVAL}ms...`);
+    } else {
+      console.log(`✅ Cycle complete in ${cycleDuration}s. Next cycle in ${POLL_INTERVAL / 1000}s...`);
+    }
   } catch (error) {
-    console.error('❌ Error in monitoring loop:', error);
-    console.error('Stack:', error.stack);
+    const cycleDuration = ((Date.now() - cycleStart) / 1000).toFixed(1);
+    if (error.message && error.message.includes('timeout')) {
+      console.error(`❌ Monitoring cycle TIMEOUT after ${cycleDuration}s - restarting...`);
+      console.error('This may indicate a stuck operation. The cycle will restart.');
+    } else {
+      console.error('❌ Error in monitoring loop:', error);
+      console.error('Stack:', error.stack);
+    }
   }
 
   // Schedule next check
@@ -280,11 +300,13 @@ let consecutiveRateLimits = 0;
  */
 async function getLogsInChunks(provider, filter, fromBlock, toBlock, maxBlockRange = FREE_TIER_MAX_BLOCK_RANGE) {
   const allLogs = [];
+  const GET_LOGS_TIMEOUT = 15000; // 15 second timeout per getLogs call
+
   for (let blockNum = fromBlock; blockNum <= toBlock; blockNum += maxBlockRange) {
     const endBlock = Math.min(blockNum + maxBlockRange - 1, toBlock);
     let retries = 3;
     let success = false;
-    
+
     while (retries > 0 && !success) {
       try {
         // If we've hit rate limits recently, add extra delay
@@ -294,16 +316,21 @@ async function getLogsInChunks(provider, filter, fromBlock, toBlock, maxBlockRan
           console.log(`  ⏳ Rate limit backoff: waiting ${backoffDelay}ms...`);
           await new Promise(resolve => setTimeout(resolve, backoffDelay));
         }
-        
-        const logs = await provider.getLogs({
+
+        // Add timeout to getLogs call
+        const logsPromise = provider.getLogs({
           ...filter,
           fromBlock: blockNum,
           toBlock: endBlock
         });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('getLogs timeout after 15s')), GET_LOGS_TIMEOUT)
+        );
+        const logs = await Promise.race([logsPromise, timeoutPromise]);
         allLogs.push(...logs);
         success = true;
         consecutiveRateLimits = 0; // Reset on success
-        
+
         // Delay between chunks (increased to avoid rate limits)
         if (endBlock < toBlock) {
           const baseDelay = CATCH_UP_MODE ? 200 : 500; // Increased from 50/200
@@ -316,7 +343,7 @@ async function getLogsInChunks(provider, filter, fromBlock, toBlock, maxBlockRan
           error.message.includes('exceeded') ||
           error.message.includes('rate limit')
         );
-        
+
         if (isRateLimit) {
           lastRateLimitHit = Date.now();
           consecutiveRateLimits++;
@@ -336,19 +363,31 @@ async function getLogsInChunks(provider, filter, fromBlock, toBlock, maxBlockRan
 
 /**
  * Smart RPC call with automatic fallback: Try free API first, fallback to paid on rate limit
+ * Includes overall timeout to prevent infinite hangs
  */
 async function smartRpcCall(operation, usePaid = false, retries = 2) {
+  const OVERALL_TIMEOUT = 30000; // 30 second overall timeout for any RPC call
+
+  const operationWithTimeout = async (provider) => {
+    return await Promise.race([
+      operation(provider),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('RPC call timeout after 30s')), OVERALL_TIMEOUT)
+      )
+    ]);
+  };
+
   // If operation requires paid (trace API, large ranges), use paid directly
   if (usePaid) {
     if (!providerPaid || !ALCHEMY_API_KEY_PAID) {
       throw new Error('Paid API required but not available');
     }
-    return await operation(providerPaid);
+    return await operationWithTimeout(providerPaid);
   }
 
   // Try free API first
   try {
-    return await operation(providerFree);
+    return await operationWithTimeout(providerFree);
   } catch (error) {
     // Check if it's a rate limit error
     const isRateLimit = error.message && (
@@ -364,22 +403,22 @@ async function smartRpcCall(operation, usePaid = false, retries = 2) {
     if (isRateLimit) {
       lastRateLimitHit = Date.now();
       consecutiveRateLimits++;
-      
+
       // If we have paid API, try it with backoff
       if (providerPaid && ALCHEMY_API_KEY_PAID && retries > 0) {
         const backoffTime = Math.min(consecutiveRateLimits * 1000, 5000);
         console.log(`  ⚠️  Free API rate limited (${consecutiveRateLimits}x). Waiting ${backoffTime}ms before paid fallback...`);
         await new Promise(resolve => setTimeout(resolve, backoffTime));
-        
+
         try {
-          return await operation(providerPaid);
+          return await operationWithTimeout(providerPaid);
         } catch (paidError) {
           // If paid also rate limited, wait longer and retry
           if (paidError.message && paidError.message.includes('429')) {
             const longerBackoff = Math.min(consecutiveRateLimits * 2000, 10000);
             console.log(`  ⚠️  Paid API also rate limited. Waiting ${longerBackoff}ms...`);
             await new Promise(resolve => setTimeout(resolve, longerBackoff));
-            
+
             if (retries > 0) {
               return await smartRpcCall(operation, usePaid, retries - 1);
             }
@@ -877,7 +916,12 @@ async function extractAndStoreDeployment(tx, receipt, knownTokenAddress = null) 
     try {
       // Base network uses .base.eth for ENS
       // Try to resolve via public API
-      const ensResponse = await fetch(`https://api.ensideas.com/ens/resolve/${tx.from}?chainId=8453`);
+      const ensController = new AbortController();
+      const ensTimeout = setTimeout(() => ensController.abort(), 5000);
+      const ensResponse = await fetch(`https://api.ensideas.com/ens/resolve/${tx.from}?chainId=8453`, {
+        signal: ensController.signal
+      });
+      clearTimeout(ensTimeout);
       if (ensResponse.ok) {
         const ensData = await ensResponse.json();
         if (ensData.name) {
@@ -902,20 +946,32 @@ async function extractAndStoreDeployment(tx, receipt, knownTokenAddress = null) 
         // Try Etherscan API first (most accurate and efficient)
         if (ETHERSCAN_API_KEY) {
           try {
+            const responseController = new AbortController();
+            const responseTimeout = setTimeout(() => responseController.abort(), 5000);
             const response = await fetch(
-              `${ETHERSCAN_API_URL}?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&apikey=${ETHERSCAN_API_KEY}&page=1&offset=1`
+              `${ETHERSCAN_API_URL}?module=token&action=tokenholderlist&contractaddress=${tokenAddress}&apikey=${ETHERSCAN_API_KEY}&page=1&offset=1`,
+              { signal: responseController.signal }
             );
+            clearTimeout(responseTimeout);
             const data = await response.json();
             if (data.status === '1' && data.result) {
               // Get total supply holders (if available) or count from first page
               // Note: This endpoint might return paginated results, but we can get an estimate
+              const holderController = new AbortController();
+              const holderTimeout = setTimeout(() => holderController.abort(), 5000);
               const holderResponse = await fetch(
-                `${ETHERSCAN_API_URL}?module=stats&action=tokensupply&contractaddress=${tokenAddress}&apikey=${ETHERSCAN_API_KEY}`
+                `${ETHERSCAN_API_URL}?module=stats&action=tokensupply&contractaddress=${tokenAddress}&apikey=${ETHERSCAN_API_KEY}`,
+                { signal: holderController.signal }
               );
+              clearTimeout(holderTimeout);
               // Alternative: Use token info endpoint
+              const tokenInfoController = new AbortController();
+              const tokenInfoTimeout = setTimeout(() => tokenInfoController.abort(), 5000);
               const tokenInfoResponse = await fetch(
-                `${ETHERSCAN_API_URL}?module=token&action=tokeninfo&contractaddress=${tokenAddress}&apikey=${ETHERSCAN_API_KEY}`
+                `${ETHERSCAN_API_URL}?module=token&action=tokeninfo&contractaddress=${tokenAddress}&apikey=${ETHERSCAN_API_KEY}`,
+                { signal: tokenInfoController.signal }
               );
+              clearTimeout(tokenInfoTimeout);
               const tokenInfo = await tokenInfoResponse.json();
 
               // Try to get holder count from token info or estimate from transfers
@@ -1042,7 +1098,9 @@ async function verifyHoldersWithTrace(tokenAddress, potentialHolders, fromBlock,
       if (blockNum < fromBlock) break;
 
       try {
-        // Get trace for the block
+        // Get trace for the block with timeout
+        const traceController = new AbortController();
+        const traceTimeout = setTimeout(() => traceController.abort(), 10000);
         const traceResponse = await fetch(ALCHEMY_TRACE_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1051,8 +1109,10 @@ async function verifyHoldersWithTrace(tokenAddress, potentialHolders, fromBlock,
             id: 1,
             method: 'trace_block',
             params: [`0x${blockNum.toString(16)}`]
-          })
+          }),
+          signal: traceController.signal
         });
+        clearTimeout(traceTimeout);
 
         if (!traceResponse.ok) continue;
         const traceData = await traceResponse.json();
@@ -1147,75 +1207,135 @@ async function calculateActualVolume(deployment, currentBlock, currentTimestamp)
       // Get unique transaction hashes
       const txHashes = [...new Set(transferLogs.map(log => log.transactionHash))];
 
-      // Limit to most recent 50 transactions to avoid rate limits
-      const recentTxs = txHashes.slice(-50);
+      // Limit to most recent 10 transactions to avoid timeouts and rate limits (reduced from 20)
+      const recentTxs = txHashes.slice(-10);
+
+      // Set a timeout for the entire volume calculation (15 seconds max - reduced from 30)
+      const volumeCalculationStart = Date.now();
+      const MAX_VOLUME_CALC_TIME = 15000; // 15 seconds
 
       // Process transactions in batches to get traces
-      for (const txHash of recentTxs) {
+      for (let i = 0; i < recentTxs.length; i++) {
+        const txHash = recentTxs[i];
+
+        // Check if we've exceeded max time
+        if (Date.now() - volumeCalculationStart > MAX_VOLUME_CALC_TIME) {
+          console.log(`    ⏱️  Volume calculation timeout after ${i}/${recentTxs.length} transactions, using fallback`);
+          break;
+        }
+
         try {
-          const tx = await providerFree.getTransaction(txHash);
+          // Add timeout to transaction fetch (5 seconds)
+          const txPromise = providerFree.getTransaction(txHash);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Transaction fetch timeout')), 5000)
+          );
+          const tx = await Promise.race([txPromise, timeoutPromise]);
+
           if (!tx || !tx.to) continue;
 
           // Check if transaction interacts with a DEX router
           const toAddress = tx.to.toLowerCase();
           if (!DEX_ROUTERS.has(toAddress)) continue;
 
-          // Get transaction trace using Alchemy Trace API
-          const traceResponse = await fetch(ALCHEMY_TRACE_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'trace_transaction',
-              params: [txHash]
-            })
-          });
+          // Get transaction trace using Alchemy Trace API with timeout
+          const traceController = new AbortController();
+          const traceTimeout = setTimeout(() => traceController.abort(), 10000); // 10 second timeout
 
-          if (!traceResponse.ok) continue;
-          const traceData = await traceResponse.json();
+          try {
+            const traceResponse = await fetch(ALCHEMY_TRACE_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'trace_transaction',
+                params: [txHash]
+              }),
+              signal: traceController.signal
+            });
 
-          if (traceData.result && Array.isArray(traceData.result)) {
-            // Extract ETH value transfers from trace
-            for (const trace of traceData.result) {
-              if (trace.action && trace.action.value) {
-                const value = BigInt(trace.action.value);
-                if (value > 0) {
-                  const ethValue = parseFloat(ethers.formatEther(value));
+            clearTimeout(traceTimeout);
 
-                  // Check if this trace involves our token or WETH
-                  const traceAddress = trace.action.to?.toLowerCase();
-                  if (traceAddress === tokenAddress || traceAddress === WETH_ADDRESS) {
-                    // Get block number for this transaction
-                    const receipt = await providerFree.getTransactionReceipt(txHash);
-                    if (receipt) {
-                      const block = await providerFree.getBlock(receipt.blockNumber);
-                      const txTimestamp = block ? block.timestamp : currentTimestamp;
-                      const age = currentTimestamp - txTimestamp;
+            if (!traceResponse.ok) {
+              console.log(`    ⚠️  Trace API returned ${traceResponse.status} for ${txHash.slice(0, 10)}...`);
+              continue;
+            }
 
-                      if (age <= 3600) { // 1 hour
-                        volume1h += ethValue;
-                      }
-                      if (age <= 21600) { // 6 hours
-                        volume6h += ethValue;
-                      }
-                      if (age <= 86400) { // 24 hours
-                        volume24h += ethValue;
-                      }
-                      if (age <= 604800) { // 7 days
-                        volume7d += ethValue;
+            const traceData = await traceResponse.json();
+
+            if (traceData.error) {
+              console.log(`    ⚠️  Trace API error: ${traceData.error.message || 'Unknown error'}`);
+              continue;
+            }
+
+            if (traceData.result && Array.isArray(traceData.result)) {
+              // Extract ETH value transfers from trace
+              for (const trace of traceData.result) {
+                if (trace.action && trace.action.value) {
+                  const value = BigInt(trace.action.value);
+                  if (value > 0) {
+                    const ethValue = parseFloat(ethers.formatEther(value));
+
+                    // Check if this trace involves our token or WETH
+                    const traceAddress = trace.action.to?.toLowerCase();
+                    if (traceAddress === tokenAddress || traceAddress === WETH_ADDRESS) {
+                      // Get block number for this transaction (with timeout)
+                      try {
+                        const receiptPromise = providerFree.getTransactionReceipt(txHash);
+                        const receiptTimeout = new Promise((_, reject) =>
+                          setTimeout(() => reject(new Error('Receipt fetch timeout')), 5000)
+                        );
+                        const receipt = await Promise.race([receiptPromise, receiptTimeout]);
+
+                        if (receipt) {
+                          const blockPromise = providerFree.getBlock(receipt.blockNumber);
+                          const blockTimeout = new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('Block fetch timeout')), 5000)
+                          );
+                          const block = await Promise.race([blockPromise, blockTimeout]);
+                          const txTimestamp = block ? block.timestamp : currentTimestamp;
+                          const age = currentTimestamp - txTimestamp;
+
+                          if (age <= 3600) { // 1 hour
+                            volume1h += ethValue;
+                          }
+                          if (age <= 21600) { // 6 hours
+                            volume6h += ethValue;
+                          }
+                          if (age <= 86400) { // 24 hours
+                            volume24h += ethValue;
+                          }
+                          if (age <= 604800) { // 7 days
+                            volume7d += ethValue;
+                          }
+                        }
+                      } catch (blockErr) {
+                        // Skip this transaction if block/receipt fetch fails
+                        continue;
                       }
                     }
                   }
                 }
               }
             }
-          }
 
-        // Small delay to avoid rate limits (faster on paid plan)
-        await new Promise(resolve => setTimeout(resolve, 50));
+            // Small delay to avoid rate limits
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (fetchErr) {
+            clearTimeout(traceTimeout);
+            if (fetchErr.name === 'AbortError') {
+              console.log(`    ⏱️  Trace API timeout for ${txHash.slice(0, 10)}..., skipping`);
+            } else {
+              console.log(`    ⚠️  Trace API error for ${txHash.slice(0, 10)}...: ${fetchErr.message}`);
+            }
+            continue;
+          }
         } catch (err) {
-          // Continue with next transaction if trace fails
+          // Continue with next transaction if anything fails
+          if (err.message !== 'Transaction fetch timeout') {
+            console.log(`    ⚠️  Error processing transaction ${txHash.slice(0, 10)}...: ${err.message}`);
+          }
           continue;
         }
       }
@@ -1286,13 +1406,19 @@ async function fetchMarketCap(tokenAddress) {
   }
 
   try {
-    // DEXScreener API endpoint for token data
+    // DEXScreener API endpoint for token data with timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json'
-      }
+      },
+      signal: controller.signal
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       return 0;
@@ -1321,6 +1447,9 @@ async function fetchMarketCap(tokenAddress) {
     return 0;
   } catch (error) {
     // Silently fail - market cap is optional
+    if (error.name === 'AbortError') {
+      console.log(`  ⏱️  Market cap fetch timeout for ${tokenAddress.slice(0, 10)}...`);
+    }
     return 0;
   }
 }
@@ -1378,7 +1507,7 @@ async function updateHolderCounts() {
     // Score and prioritize tokens for checking
     // First pass: Quick volume check for tokens (sequential to reduce costs, limit to top 10)
     // Only check volume for top priority tokens to reduce API calls
-    const tokensToCheckVolume = validTokens.slice(0, CATCH_UP_MODE ? 20 : 10); // More tokens in catch-up mode
+    const tokensToCheckVolume = validTokens.slice(0, CATCH_UP_MODE ? 50 : 10); // Increased to 50 in catch-up mode for faster processing
     const tokensWithVolume = [];
 
     // Process sequentially with delays to reduce costs
@@ -1411,14 +1540,83 @@ async function updateHolderCounts() {
       tokensWithVolume.push({ deployment, recentVolume: 0 });
     }
 
-    // Second pass: Calculate priority scores and actual volume in ETH
-    // For now, we'll use transfer count as a proxy for volume activity
-    // TODO: Improve to calculate actual ETH volume from Swap events
+    // Second pass: Calculate priority scores with tiered system
+    // Tier 1: Highest MCAP, holders, score (always prioritized unless stale)
+    // Tier 2: Active tokens with recent changes
+    // Tier 3: New tokens or tokens with no data yet
+    // Stale: Tokens with no change in 2+ cycles go back to round-robin
+
     const tokensWithPriority = tokensWithVolume.map(({ deployment, recentVolume }) => {
       let priority = 0;
+      const history = deployment.holderCountHistory || [];
+      const lastCheck = deployment.lastHolderCheck || (history.length > 0 ? history[history.length - 1].timestamp : null);
+      const age = currentTimestamp - deployment.timestamp;
+
+      // Determine if token has data vs no data
+      const hasData = lastCheck !== null && history.length > 0;
+      const hasNoData = !hasData; // Never been checked
+
+      // Check if token is stale (no change in 2+ cycles)
+      // A cycle is roughly POLL_INTERVAL, so 2 cycles = 2 * POLL_INTERVAL
+      const cyclesSinceCheck = lastCheck ? Math.floor((currentTimestamp - lastCheck) / POLL_INTERVAL) : 0;
+      const isStale = hasData && cyclesSinceCheck >= 2;
+
+      // Check if token showed activity in last check
+      let hasActivity = false;
+      if (history.length >= 2) {
+        const recent = history[history.length - 1];
+        const previous = history[history.length - 2];
+        const change = recent.count - previous.count;
+        hasActivity = change > 0 || (deployment.volume24h || 0) > 0 || (deployment.marketCap || 0) > 0;
+      }
+
+      // TIER 1: Highest MCAP, holders, score (MASSIVE priority boost)
+      // BUT: In catch-up mode, only apply if token already has data (not in backlog)
+      const holderCount = deployment.holderCount || 0;
+      const marketCap = deployment.marketCap || 0;
+      const volume24h = deployment.volume24h || 0;
+
+      // Calculate score (same as frontend)
+      let score = 0;
+      if (history.length >= 2) {
+        const recent = history[history.length - 1];
+        const previous = history[history.length - 2];
+        const growth = recent.count - previous.count;
+        const growthPercent = previous.count > 0 ? (growth / previous.count) * 100 : 0;
+        const normalizedGrowth = Math.min(growthPercent / 10, 10);
+        const normalizedAbsGrowth = Math.min(growth, 50);
+        score = (volume24h * 0.4) + (normalizedGrowth * 0.4) + (normalizedAbsGrowth * 0.2);
+      }
+
+      // Tier 1 boost: High MCAP, holders, or score
+      const isTier1 = marketCap > 10000 || holderCount > 50 || score > 1.0;
+
+      // In catch-up mode, only prioritize Tier 1 if token already has data (not in backlog)
+      if (CATCH_UP_MODE && hasNoData) {
+        // Skip Tier 1 boost for tokens with no data - they'll get processed anyway
+      } else if (isTier1 && !isStale) {
+        // Tier 1 tokens get massive priority unless stale
+        if (marketCap > 100000) priority += 10000; // $100K+ MCAP
+        else if (marketCap > 50000) priority += 5000; // $50K+ MCAP
+        else if (marketCap > 10000) priority += 2000; // $10K+ MCAP
+
+        if (holderCount > 100) priority += 5000; // 100+ holders
+        else if (holderCount > 50) priority += 2000; // 50+ holders
+
+        if (score > 5.0) priority += 5000; // Very high score
+        else if (score > 2.0) priority += 2000; // High score
+        else if (score > 1.0) priority += 1000; // Good score
+      } else if (isTier1 && isStale) {
+        // Stale tier 1 tokens: still check but lower priority
+        priority += 500; // Reduced priority for stale tier 1
+      }
+
+      // TIER 2: Active tokens with recent changes
+      if (!isTier1 && hasActivity && !isStale) {
+        priority += 1000; // Active tokens get good priority
+      }
 
       // Priority 1: HIGH VOLUME DETECTION (most important for catching active tokens!)
-      // This is the "trick" - we check volume BEFORE checking holder count
       if (recentVolume > 50) priority += 2000; // Very high volume (50+ transfers in 50 blocks)
       else if (recentVolume > 20) priority += 1000; // High volume (20+ transfers)
       else if (recentVolume > 10) priority += 500; // Moderate volume (10+ transfers)
@@ -1426,13 +1624,11 @@ async function updateHolderCounts() {
       else if (recentVolume > 0) priority += 100; // Any recent activity
 
       // Priority 2: Newer tokens (deployed in last hour = high priority)
-      const age = currentTimestamp - deployment.timestamp;
       if (age < 3600) priority += 1000; // Very new
       else if (age < 7200) priority += 500; // Recent
       else if (age < 14400) priority += 200; // Fairly recent
 
       // Priority 3: Tokens with recent holder growth (indicates activity)
-      const history = deployment.holderCountHistory || [];
       if (history.length >= 2) {
         const recent = history[history.length - 1];
         const previous = history[history.length - 2];
@@ -1445,30 +1641,52 @@ async function updateHolderCounts() {
         }
       }
 
-      // Priority 4: Tokens not checked recently (stale data) - HEAVILY penalize recently-checked
-      const lastCheck = deployment.lastHolderCheck || (history.length > 0 ? history[history.length - 1].timestamp : deployment.timestamp);
-      const timeSinceCheck = currentTimestamp - lastCheck;
-
-      // Cooldown period: Skip tokens checked very recently (unless brand new)
-      // Use existing 'age' variable from Priority 2
+      // Priority 4: Distinguish "no data" vs "no activity"
+      const timeSinceCheck = lastCheck ? (currentTimestamp - lastCheck) : Infinity;
       const isVeryNew = age < 3600; // Less than 1 hour old
 
-      if (timeSinceCheck < 600 && !isVeryNew) {
-        priority -= 5000; // Checked in last 10 min - skip unless extremely high priority or very new (increased from 2 min)
-      } else if (timeSinceCheck < 1200 && !isVeryNew) {
-        priority -= 2000; // Checked in last 20 min - heavy penalty (increased from 5 min)
-      } else if (timeSinceCheck < 1800) {
-        priority -= 500; // Checked in last 30 min - moderate penalty (increased from 10 min)
-      } else if (timeSinceCheck > 1800) {
-        priority += 400; // Not checked in 30+ min - bonus (increased from 10 min)
-      } else if (timeSinceCheck > 1200) {
-        priority += 200; // Not checked in 20+ min (increased from 5 min)
-      } else if (timeSinceCheck > 600) {
-        priority += 100; // Not checked in 10+ min (increased from 2 min)
+      // In catch-up mode, prioritize backlog (no data) over everything else
+      if (CATCH_UP_MODE) {
+        if (hasNoData) {
+          // No data gathered yet - MASSIVE priority in catch-up mode to process backlog
+          priority += 50000; // Highest priority - process backlog first
+        } else if (isStale) {
+          // Stale token - high priority to refresh data
+          priority += 20000; // High priority for stale tokens
+        } else if (hasData && !hasActivity) {
+          // Has data but no activity - lower priority (token might be dead)
+          priority += 200; // Low priority for inactive tokens
+        }
+      } else {
+        // Normal mode: prioritize active/high-value tokens
+        if (hasNoData) {
+          // No data gathered yet - high priority to get initial data
+          priority += 1500; // High priority for tokens we haven't checked
+        } else if (hasData && !hasActivity && !isStale) {
+          // Has data but no activity - lower priority (token might be dead)
+          priority += 200; // Low priority for inactive tokens
+        } else if (isStale) {
+          // Stale token (no change in 2+ cycles) - back to round-robin
+          priority += 100; // Minimal priority, round-robin style
+        }
+      }
+
+      // Cooldown period: Skip tokens checked very recently (unless tier 1 or very new)
+      if (timeSinceCheck < 600 && !isVeryNew && !isTier1) {
+        priority -= 5000; // Checked in last 10 min - skip unless tier 1 or very new
+      } else if (timeSinceCheck < 1200 && !isVeryNew && !isTier1) {
+        priority -= 2000; // Checked in last 20 min - heavy penalty
+      } else if (timeSinceCheck < 1800 && !isTier1) {
+        priority -= 500; // Checked in last 30 min - moderate penalty
+      } else if (timeSinceCheck > 1800 && !isStale) {
+        priority += 400; // Not checked in 30+ min - bonus (unless stale)
+      } else if (timeSinceCheck > 1200 && !isStale) {
+        priority += 200; // Not checked in 20+ min
+      } else if (timeSinceCheck > 600 && !isStale) {
+        priority += 100; // Not checked in 10+ min
       }
 
       // Priority 5: Tokens with higher holder counts (more holders = more important)
-      const holderCount = deployment.holderCount || 0;
       if (holderCount > 100) priority += 500;
       else if (holderCount > 50) priority += 300;
       else if (holderCount > 20) priority += 150;
@@ -1483,7 +1701,17 @@ async function updateHolderCounts() {
       else if (devBuy > 0.1) priority += 75; // 0.1+ ETH dev buy
       else if (devBuy > 0) priority += 25; // Any dev buy
 
-      return { deployment, priority, lastCheck, recentVolume };
+      return {
+        deployment,
+        priority,
+        lastCheck,
+        recentVolume,
+        isTier1,
+        isStale,
+        hasNoData,
+        hasActivity,
+        score
+      };
     });
 
     // Sort by priority (highest first) and filter out tokens with negative priority (recently checked)
@@ -1503,7 +1731,7 @@ async function updateHolderCounts() {
     });
 
     // Reduce tokens per cycle if we're hitting rate limits
-    const maxTokens = consecutiveRateLimits > 3 ? 1 : (CATCH_UP_MODE ? 3 : 1); // Reduced from 5 to 3 in catch-up mode
+    const maxTokens = consecutiveRateLimits > 3 ? 1 : (CATCH_UP_MODE ? 10 : 1); // Increased to 10 in catch-up mode for faster processing
     const toUpdate = filteredByCooldown.slice(0, maxTokens).map(t => t.deployment);
 
     // Store volume data for tokens with activity (process sequentially to avoid Supabase rate limits)
@@ -1525,7 +1753,7 @@ async function updateHolderCounts() {
 
         return true;
       })
-      .slice(0, consecutiveRateLimits > 3 ? 3 : (CATCH_UP_MODE ? 5 : 3)); // Reduced from 10 to 5 in catch-up mode
+      .slice(0, consecutiveRateLimits > 3 ? 3 : (CATCH_UP_MODE ? 15 : 3)); // Increased to 15 in catch-up mode for faster processing
 
     // Auto-disable catch-up mode if we have minimal work for several cycles
     if (CATCH_UP_MODE) {
@@ -1639,9 +1867,13 @@ async function updateHolderCounts() {
           // Try Etherscan API first if available
           if (ETHERSCAN_API_KEY) {
             try {
+              const responseController = new AbortController();
+              const responseTimeout = setTimeout(() => responseController.abort(), 5000);
               const response = await fetch(
-                `${ETHERSCAN_API_URL}?module=token&action=tokenholderlist&contractaddress=${deployment.tokenAddress}&apikey=${ETHERSCAN_API_KEY}&page=1&offset=1000`
+                `${ETHERSCAN_API_URL}?module=token&action=tokenholderlist&contractaddress=${deployment.tokenAddress}&apikey=${ETHERSCAN_API_KEY}&page=1&offset=1000`,
+                { signal: responseController.signal }
               );
+              clearTimeout(responseTimeout);
               const data = await response.json();
               if (data.status === '1' && data.result && Array.isArray(data.result)) {
                 newHolderCount = Math.max(newHolderCount, data.result.length);
@@ -1793,11 +2025,27 @@ async function updateHolderCounts() {
               newHistory.shift(); // Remove oldest
             }
 
+            // Fetch market cap if not already set (refresh periodically)
+            let marketCap = deployment.marketCap || 0;
+            // Only fetch if missing or very old (check every 3rd holder update to reduce API calls)
+            const shouldFetchMarketCap = !marketCap || (countChanged && Math.random() < 0.33);
+            if (shouldFetchMarketCap) {
+              try {
+                marketCap = await fetchMarketCap(deployment.tokenAddress);
+                if (marketCap > 0) {
+                  console.log(`    💰 Market cap: $${(marketCap / 1000).toFixed(1)}K`);
+                }
+              } catch (e) {
+                // If market cap fetch fails, keep existing value
+              }
+            }
+
             // Prepare update object
             const updateData = {
               holderCount: newHolderCount,
               holderCountHistory: newHistory,
-              lastHolderCheck: currentTimestamp // Track when we last checked
+              lastHolderCheck: currentTimestamp, // Track when we last checked
+              marketCap: marketCap
             };
 
             // Mark as pruned if it should be stopped

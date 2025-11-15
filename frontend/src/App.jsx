@@ -36,6 +36,17 @@ function App() {
   const hasEnoughTokens = tokenBalance && tokenBalance.value >= REQUIRED_BALANCE;
   const hasAccess = isWhitelistedDev || hasEnoughTokens;
 
+  // Different thresholds for different sections
+  const ALERTS_THRESHOLD = 25000000n; // 25M
+  const HOT_RUNNERS_THRESHOLD = 15000000n; // 15M
+  const NEWEST_5_THRESHOLD = 10000000n; // 10M
+  const ALL_DEPLOYMENTS_THRESHOLD = 5000000n; // 5M
+
+  const hasAlertsAccess = isWhitelistedDev || (tokenBalance && tokenBalance.value >= ALERTS_THRESHOLD);
+  const hasHotRunnersAccess = isWhitelistedDev || (tokenBalance && tokenBalance.value >= HOT_RUNNERS_THRESHOLD);
+  const hasNewest5Access = isWhitelistedDev || (tokenBalance && tokenBalance.value >= NEWEST_5_THRESHOLD);
+  const hasAllDeploymentsAccess = isWhitelistedDev || (tokenBalance && tokenBalance.value >= ALL_DEPLOYMENTS_THRESHOLD);
+
   const playDeploymentSound = () => {
     if (isMuted) return;
 
@@ -92,23 +103,34 @@ function App() {
       }
 
       // Check for new deployments (not seen before)
+      // Only check if we already have seen deployments (to avoid beeping on initial load)
       if (seenDeployments.size > 0 && newDeployments.length > 0) {
+        const newDeploymentHashes = new Set();
         newDeployments.forEach(deployment => {
           if (deployment.txHash && !seenDeployments.has(deployment.txHash)) {
             // New deployment detected!
-            playDeploymentSound();
+            newDeploymentHashes.add(deployment.txHash);
           }
         });
+
+        // Only play sound once if there are truly new deployments
+        if (newDeploymentHashes.size > 0) {
+          console.log(`🔔 New deployment(s) detected: ${newDeploymentHashes.size} new token(s)`);
+          playDeploymentSound();
+        }
       }
 
-      // Update seen deployments
-      const newSeenSet = new Set(seenDeployments);
-      newDeployments.forEach(deployment => {
-        if (deployment.txHash) {
-          newSeenSet.add(deployment.txHash);
-        }
+      // Update seen deployments AFTER checking for new ones
+      // Use functional update to ensure we're working with the latest state
+      setSeenDeployments(prevSeen => {
+        const newSeenSet = new Set(prevSeen);
+        newDeployments.forEach(deployment => {
+          if (deployment.txHash) {
+            newSeenSet.add(deployment.txHash);
+          }
+        });
+        return newSeenSet;
       });
-      setSeenDeployments(newSeenSet);
 
       setDeployments(newDeployments);
       setError(null);
@@ -162,10 +184,10 @@ function App() {
     // Initial fetch
     fetchDeployments();
 
-    // Poll every 5 seconds for live updates
+    // Poll every 15 seconds for live updates (reduced frequency to avoid excessive API calls)
     const interval = setInterval(() => {
       fetchDeployments();
-    }, 5000);
+    }, 15000);
 
     // Check health every 30 seconds
     const healthInterval = setInterval(() => {
@@ -326,6 +348,10 @@ function App() {
             serverStatus={dbStatus}
             hasEnoughTokens={hasEnoughTokens}
             hasAccess={hasAccess}
+            hasAlertsAccess={hasAlertsAccess}
+            hasHotRunnersAccess={hasHotRunnersAccess}
+            hasNewest5Access={hasNewest5Access}
+            hasAllDeploymentsAccess={hasAllDeploymentsAccess}
             onMuteChange={setIsMuted}
           />
         )}

@@ -40,7 +40,18 @@ function dbToDeployment(row) {
     volume24h: (row.volume_24h != null && row.volume_24h !== undefined) ? parseFloat(row.volume_24h) || 0 : 0,
     volume7d: (row.volume_7d != null && row.volume_7d !== undefined) ? parseFloat(row.volume_7d) || 0 : 0,
     volumeHistory: row.volume_history || [],
-    marketCap: (row.market_cap != null && row.market_cap !== undefined) ? parseFloat(row.market_cap) || 0 : 0,
+    marketCap: (() => {
+      const value = row.market_cap;
+      if (value == null || value === undefined || value === '' || value === 'N/A') return 0;
+      // Handle string values
+      if (typeof value === 'string') {
+        const parsed = parseFloat(value);
+        return isNaN(parsed) || !isFinite(parsed) ? 0 : parsed;
+      }
+      // Handle number values
+      const numValue = Number(value);
+      return isNaN(numValue) || !isFinite(numValue) ? 0 : numValue;
+    })(),
     // Dev transfer columns (may not exist until migration is run)
     devTransferCount: row.dev_transfer_count || 0,
     devTransferredOut: (row.dev_transferred_out != null && row.dev_transferred_out !== undefined) ? parseFloat(row.dev_transferred_out) || 0 : 0,

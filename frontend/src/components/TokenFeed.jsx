@@ -79,7 +79,16 @@ function HolderCheckTime({ lastCheckTime }) {
   );
 }
 
-function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, onMuteChange }) {
+function TokenFeed({
+  deployments,
+  hasEnoughTokens = false,
+  hasAccess = false,
+  hasAlertsAccess = false,
+  hasHotRunnersAccess = false,
+  hasNewest5Access = false,
+  hasAllDeploymentsAccess = false,
+  onMuteChange
+}) {
   const [sortField, setSortField] = useState('timestamp');
   const [sortDirection, setSortDirection] = useState('desc');
   const [ensNames, setEnsNames] = useState({});
@@ -88,10 +97,15 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
   const [hideZeroDevBuy, setHideZeroDevBuy] = useState(false); // Default OFF
   const [removeDuplicates, setRemoveDuplicates] = useState(true); // Default ON
   const [removeSerialDeployers, setRemoveSerialDeployers] = useState(true); // Default ON
+  const [hideDeadTokens, setHideDeadTokens] = useState(false); // Default OFF
   const [isMuted, setIsMuted] = useState(false);
   const [serverStatus, setServerStatus] = useState('checking');
   const [notifiedAboutMissingAlerts, setNotifiedAboutMissingAlerts] = useState(new Set());
   const [showScoreHelp, setShowScoreHelp] = useState(false);
+  const [isAlertsCollapsed, setIsAlertsCollapsed] = useState(false);
+  const [isHotRunnersCollapsed, setIsHotRunnersCollapsed] = useState(false);
+  const [isNewest5Collapsed, setIsNewest5Collapsed] = useState(false);
+  const [isAllDeploymentsCollapsed, setIsAllDeploymentsCollapsed] = useState(false);
 
   // Sync mute state with parent
   const handleMuteToggle = () => {
@@ -119,10 +133,19 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
   };
 
   const formatMarketCap = (mcap) => {
-    if (!mcap || mcap === 0) return '-';
-    if (mcap >= 1000000) return `$${(mcap / 1000000).toFixed(2)}M`;
-    if (mcap >= 1000) return `$${(mcap / 1000).toFixed(2)}K`;
-    return `$${mcap.toFixed(2)}`;
+    // Handle null, undefined, or invalid values
+    if (mcap === null || mcap === undefined || mcap === '' || mcap === 'N/A') return '-';
+
+    // Convert to number if it's a string
+    const numValue = typeof mcap === 'string' ? parseFloat(mcap) : Number(mcap);
+
+    // Check if it's a valid number
+    if (isNaN(numValue) || !isFinite(numValue) || numValue === 0) return '-';
+
+    // Format the number
+    if (numValue >= 1000000) return `$${(numValue / 1000000).toFixed(2)}M`;
+    if (numValue >= 1000) return `$${(numValue / 1000).toFixed(2)}K`;
+    return `$${numValue.toFixed(2)}`;
   };
 
   // Score Help Modal Component
@@ -295,8 +318,41 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
       }
     }
 
+    // Hide dead tokens (tokens with no activity)
+    // IMPORTANT: Never hide tokens less than 5 minutes old (they're still being processed)
+    if (hideDeadTokens) {
+      const now = Math.floor(Date.now() / 1000);
+      filtered = filtered.filter(d => {
+        const age = now - d.timestamp;
+        const holderCount = d.holderCount || 0;
+        const volume24h = d.volume24h || 0;
+        const volume1h = d.volume1h || 0;
+        const volume6h = d.volume6h || 0;
+        const marketCap = d.marketCap || 0;
+
+        // Never hide tokens less than 5 minutes old (still being processed)
+        if (age < 300) {
+          return true;
+        }
+
+        // A token is "dead" if:
+        // - Older than 1 hour AND
+        // - Has <=5 holders AND
+        // - No volume (all volume metrics are 0) AND
+        // - No market cap (or market cap is 0)
+        const isDead = age > 3600 &&
+                      holderCount <= 5 &&
+                      volume24h === 0 &&
+                      volume1h === 0 &&
+                      volume6h === 0 &&
+                      marketCap === 0;
+
+        return !isDead;
+      });
+    }
+
     return filtered;
-  }, [deployments, devBuyThreshold, hideZeroDevBuy, removeDuplicates, removeSerialDeployers]);
+  }, [deployments, devBuyThreshold, hideZeroDevBuy, removeDuplicates, removeSerialDeployers, hideDeadTokens]);
 
   // Get alerts (dev buy > 0.25 ETH) - exclude dev sold items, apply filters
   const alerts = useMemo(() => {
@@ -307,7 +363,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
 
   // Play bell sound for new alerts (only if not muted and has token access)
   useEffect(() => {
-    if (isMuted || !hasAccess) return; // Don't play sound if muted or no token access
+    if (isMuted || !hasAlertsAccess) return; // Don't play sound if muted or no token access
 
     alerts.forEach(alert => {
       if (!playedAlerts.has(alert.txHash)) {
@@ -369,11 +425,11 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
         setPlayedAlerts(prev => new Set([...prev, alert.txHash]));
       }
     });
-  }, [alerts, playedAlerts, isMuted, hasAccess]);
+  }, [alerts, playedAlerts, isMuted, hasAlertsAccess]);
 
   // Notify users about missing alerts if they don't have token access
   useEffect(() => {
-    if (isMuted || hasAccess || alerts.length === 0) return; // Don't notify if muted, has access, or no alerts
+    if (isMuted || hasAlertsAccess || alerts.length === 0) return; // Don't notify if muted, has access, or no alerts
 
     // Create a unique key for this alert set (based on count and newest alert)
     const alertKey = alerts.length > 0
@@ -405,7 +461,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
         // Fallback: browser notification
         if (Notification.permission === 'granted') {
           new Notification('🔒 Alerts Available', {
-            body: `You're missing ${alerts.length} high-value alert${alerts.length > 1 ? 's' : ''}. Hold 10M FeyScan tokens to view them.`,
+            body: `You're missing ${alerts.length} high-value alert${alerts.length > 1 ? 's' : ''}. Hold 25M FeyScan tokens to view them.`,
             icon: '🔔'
           });
         }
@@ -413,7 +469,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
 
       setNotifiedAboutMissingAlerts(prev => new Set([...prev, alertKey]));
     }
-  }, [alerts, hasAccess, isMuted, notifiedAboutMissingAlerts]);
+  }, [alerts, hasAlertsAccess, isMuted, notifiedAboutMissingAlerts]);
 
   // Calculate runners: tokens with high volume and growing holder counts
   const runners = useMemo(() => {
@@ -438,12 +494,20 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
       .slice(0, 5);
   }, [filteredDeployments]);
 
-  // Get all deployments, sorted (including newest 5)
+  // Get all deployments, sorted (excluding tokens in Hot Runners or Alerts)
   const sortedDeployments = useMemo(() => {
-    const rest = filteredDeployments.map(d => ({
-      ...d,
-      runnerData: calculateRunnerScore(d)
-    }));
+    // Get txHashes of tokens in Hot Runners and Alerts to exclude them
+    const runnerTxHashes = new Set(runners.map(r => r.txHash));
+    const alertTxHashes = new Set(alerts.map(a => a.txHash));
+    const excludedTxHashes = new Set([...runnerTxHashes, ...alertTxHashes]);
+
+    // Filter out tokens that are in Hot Runners or Alerts
+    const rest = filteredDeployments
+      .filter(d => !excludedTxHashes.has(d.txHash))
+      .map(d => ({
+        ...d,
+        runnerData: calculateRunnerScore(d)
+      }));
     return [...rest].sort((a, b) => {
       let aVal, bVal;
       switch (sortField) {
@@ -493,7 +557,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
         return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
       }
     });
-  }, [filteredDeployments, sortField, sortDirection]);
+  }, [filteredDeployments, runners, alerts, sortField, sortDirection]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -644,16 +708,20 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
     let complete = 0;
 
     deployments.forEach(d => {
-      // Consider a token "complete" if it has:
-      // - Holder count > 0 OR has holder history
-      // - Volume data (at least one volume metric)
-      // - Market cap checked (even if 0)
-      const hasHolders = d.holderCount > 0 || (d.holderCountHistory && d.holderCountHistory.length > 0);
-      const hasVolume = d.volume1h > 0 || d.volume6h > 0 || d.volume24h > 0 || d.volume7d > 0;
-      const hasMarketCap = d.marketCap !== undefined && d.marketCap !== null; // Even if 0, it means it was checked
+      // Consider a token "complete" if it has been checked by the backend
+      // A token is complete if it has:
+      // - Holder count checked (even if 0, as long as it's been checked)
+      // - OR has holder history (means backend has processed it)
+      // - OR volume data exists (even if 0, means backend checked it)
+      // - OR market cap has been checked (even if 0)
+      const hasHolders = d.holderCount !== undefined && d.holderCount !== null;
+      const hasHolderHistory = d.holderCountHistory && d.holderCountHistory.length > 0;
+      const hasVolume = d.volume1h !== undefined || d.volume6h !== undefined || d.volume24h !== undefined || d.volume7d !== undefined;
+      const hasMarketCap = d.marketCap !== undefined && d.marketCap !== null;
 
-      // Token is "complete" if it has holders AND (volume OR market cap checked)
-      if (hasHolders && (hasVolume || hasMarketCap)) {
+      // Token is "complete" if backend has checked at least holders OR volume OR market cap
+      // This is more lenient - as long as backend has touched it, it's considered "complete"
+      if (hasHolders || hasHolderHistory || hasVolume || hasMarketCap) {
         complete++;
       }
     });
@@ -756,6 +824,29 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
             </label>
           </div>
           <div className="filter-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={hideDeadTokens}
+                onChange={(e) => setHideDeadTokens(e.target.checked)}
+                className="filter-checkbox"
+              />
+              <span>Hide Dead Tokens</span>
+              <button
+                className="help-icon-small"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  alert('Hide Dead Tokens: Hides tokens older than 1 hour with ≤5 holders, no volume, and no market cap. These tokens show no activity and are likely inactive.');
+                }}
+                title="What are dead tokens?"
+                style={{ marginLeft: '4px', verticalAlign: 'middle' }}
+              >
+                ?
+              </button>
+            </label>
+          </div>
+          <div className="filter-group">
             <button
               className={`mute-button ${isMuted ? 'muted' : ''}`}
               onClick={handleMuteToggle}
@@ -769,22 +860,30 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
 
       {/* Alerts Section - Full Width at Top */}
       <div className="alerts-section-full">
-        {!hasAccess && (
+        {!hasAlertsAccess && (
           <div className="token-gate-message">
             <div className="gate-content">
               <h2>🔒 Token Gated</h2>
-              <p>Hold at least 10,000,000 FeyScan tokens to view alerts.</p>
+              <p>Hold at least 25,000,000 FeyScan tokens to view alerts.</p>
               <p className="gate-subtext">Connect your wallet to check your balance.</p>
             </div>
           </div>
         )}
-        {hasAccess && (
-          <>
+        {hasAlertsAccess && (
+          <div>
             <div className="alerts-header">
               <h2>🔔 Alerts</h2>
               <span className="alert-count">{alerts.length}</span>
+              <button
+                className="collapse-button"
+                onClick={() => setIsAlertsCollapsed(!isAlertsCollapsed)}
+                title={isAlertsCollapsed ? 'Expand' : 'Collapse'}
+              >
+                {isAlertsCollapsed ? '▼' : '▲'}
+              </button>
             </div>
-            <div className="alerts-list">
+            {!isAlertsCollapsed && (
+              <div className="alerts-list">
               {alerts.length === 0 ? (
                 <div className="no-alerts">No high dev buy alerts</div>
               ) : (
@@ -823,46 +922,127 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                   );
                 })
               )}
-            </div>
-          </>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
       {/* Main Content */}
       <div className="main-content">
-        {/* Hot Runners Section - Token Gated */}
-        {!hasAccess && runners.length > 0 && (
+        {/* Hot Runners Section - Token Gated at 15M */}
+        {!hasHotRunnersAccess && runners.length > 0 && (
           <div className="token-gate-message">
             <div className="gate-content">
               <h2>🔒 Token Gated Content</h2>
-              <p>Hold at least 10,000,000 FeyScan tokens to view Hot Runners.</p>
+              <p>Hold at least 15,000,000 FeyScan tokens to view Hot Runners.</p>
               <p className="gate-subtext">Connect your wallet to check your balance.</p>
             </div>
           </div>
         )}
-        {hasAccess && runners.length > 0 && (
+        {hasHotRunnersAccess && runners.length > 0 && (
           <div className="runners-section">
             <div className="section-header">
               <h2>🔥 Hot Runners</h2>
               <span className="runners-count">{runners.length} active</span>
+              <button
+                className="collapse-button"
+                onClick={() => setIsHotRunnersCollapsed(!isHotRunnersCollapsed)}
+                title={isHotRunnersCollapsed ? 'Expand' : 'Collapse'}
+              >
+                {isHotRunnersCollapsed ? '▼' : '▲'}
+              </button>
             </div>
+            {!isHotRunnersCollapsed && (
             <div className="runners-table-container">
               <table className="runners-table">
                 <thead>
                   <tr>
-                    <th>Rank</th>
                     <th className="sortable" onClick={() => handleSort('tokenName')}>
                       Token <SortArrow field="tokenName" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('holderCount')}>
-                      Holders <SortArrow field="holderCount" />
+                      Holders
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Holders: Total number of unique addresses that hold this token.');
+                        }}
+                        title="What are holders?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="holderCount" />
                     </th>
-                    <th>Growth</th>
+                    <th>
+                      Growth
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Growth: Percentage change in holder count since last check. Shows how quickly the token is gaining holders.');
+                        }}
+                        title="What is growth?"
+                      >
+                        ?
+                      </button>
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('volume1h')}>
+                      Volume 1h
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Volume 1h: Total trading volume in ETH over the last 1 hour. Shows very recent activity.');
+                        }}
+                        title="What is 1h volume?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="volume1h" />
+                    </th>
+                    <th className="sortable" onClick={() => handleSort('volume6h')}>
+                      Volume 6h
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Volume 6h: Total trading volume in ETH over the last 6 hours. Shows short-term activity.');
+                        }}
+                        title="What is 6h volume?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="volume6h" />
+                    </th>
                     <th className="sortable" onClick={() => handleSort('volume24h')}>
-                      Volume 24h <SortArrow field="volume24h" />
+                      Volume 24h
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Volume 24h: Total trading volume in ETH over the last 24 hours.');
+                        }}
+                        title="What is 24h volume?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="volume24h" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('marketCap')}>
-                      MCAP <SortArrow field="marketCap" />
+                      MCAP
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('MCAP: Market capitalization in USD, calculated from token price and total supply.');
+                        }}
+                        title="What is market cap?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="marketCap" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('runnerScore')}>
                       Score
@@ -879,12 +1059,46 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                       <SortArrow field="runnerScore" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('devBuyAmount')}>
-                      Dev Buy <SortArrow field="devBuyAmount" />
+                      Dev Buy
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Dev Buy: Amount of ETH the deployer spent to buy tokens immediately after deployment. Higher amounts indicate more confidence.');
+                        }}
+                        title="What is dev buy?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="devBuyAmount" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('timestamp')}>
-                      Age <SortArrow field="timestamp" />
+                      Age
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Age: Time since the token was deployed. Shows how new the token is.');
+                        }}
+                        title="What is age?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="timestamp" />
                     </th>
-                    <th>Links</th>
+                    <th>
+                      Links
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Links: Quick access to DexScreener (DS), Defined.fi (DF), and BaseScan (BS) for this token.');
+                        }}
+                        title="What are links?"
+                      >
+                        ?
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -901,12 +1115,11 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
 
                     return (
                       <tr key={runner.txHash || index} className={`runner-row ${index < 3 ? 'top-runner' : ''}`}>
-                        <td className="runner-rank">
-                          {index < 3 && <span className="runner-badge">🔥</span>}
-                          <span className="rank-number">#{index + 1}</span>
-                        </td>
                         <td className="token-name-cell">
-                          <strong>{runner.tokenName || 'Unknown'}</strong>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {index < 3 && <span className="runner-badge-small" title="Hot Runner">🔥</span>}
+                            <strong>{runner.tokenName || 'Unknown'}</strong>
+                          </div>
                         </td>
                         <td className="holder-count-cell">
                           <div className="holder-count-display">
@@ -921,28 +1134,26 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                           </div>
                         </td>
                         <td className="growth-cell">
-                          {runner.runnerData.growthPercent > 0 ? (
-                            <span className={`growth-indicator ${runner.runnerData.growthPercent > 20 ? 'rapid' : runner.runnerData.growthPercent > 10 ? 'high' : 'medium'}`}>
-                              +{runner.runnerData.growthPercent.toFixed(1)}%
+                          {holderTrend && holderTrend.changePercent > 0 ? (
+                            <span className={`growth-indicator ${holderTrend.changePercent > 20 ? 'rapid' : holderTrend.changePercent > 10 ? 'high' : 'medium'}`}>
+                              +{holderTrend.changePercent.toFixed(1)}%
                             </span>
                           ) : (
                             <span className="growth-indicator">-</span>
                           )}
                         </td>
                         <td className="volume-cell">
-                          {formatVolume(runner.volume1h)}
-                          {runner.volume1h > 0.1 && <span className="volume-badge">💰</span>}
+                          {formatVolume(runner.volume1h || 0)}
                         </td>
                         <td className="volume-cell">
-                          {formatVolume(runner.volume6h)}
-                          {runner.volume6h > 0.1 && <span className="volume-badge">💰</span>}
+                          {formatVolume(runner.volume6h || 0)}
                         </td>
                         <td className="volume-cell">
-                          {formatVolume(runner.runnerData.volume24h)}
-                          {runner.runnerData.volume24h > 0.1 && <span className="volume-badge">💰</span>}
+                          {formatVolume(runner.volume24h || 0)}
+                          {(runner.volume24h || 0) > 0.1 && <span className="volume-badge">💰</span>}
                         </td>
                         <td className="mcap-cell">
-                          {formatMarketCap(runner.marketCap)}
+                          {formatMarketCap(runner.marketCap || 0)}
                         </td>
                         <td className="score-cell">
                           <span className={`runner-score ${runner.runnerData.score > 0.5 ? 'high' : runner.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
@@ -981,11 +1192,12 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         )}
 
         {/* Newest 5 Section - Token Gated */}
-        {!hasAccess && (
+        {!hasNewest5Access && (
           <div className="token-gate-message">
             <div className="gate-content">
               <h2>🔒 Token Gated Content</h2>
@@ -994,7 +1206,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
             </div>
           </div>
         )}
-        {hasAccess && newest5.length > 0 && (
+        {hasNewest5Access && newest5.length > 0 && (
           <div className="newest-section">
             <div className="section-header">
               <h2>Newest 5 Deployments</h2>
@@ -1014,20 +1226,87 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                       Token <SortArrow field="tokenName" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('holderCount')}>
-                      Holders <SortArrow field="holderCount" />
+                      Holders
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Holders: Total number of unique addresses that hold this token.');
+                        }}
+                        title="What are holders?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="holderCount" />
                     </th>
-                    <th>Growth</th>
+                    <th>
+                      Growth
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Growth: Percentage change in holder count since last check. Shows how quickly the token is gaining holders.');
+                        }}
+                        title="What is growth?"
+                      >
+                        ?
+                      </button>
+                    </th>
                     <th className="sortable" onClick={() => handleSort('volume1h')}>
-                      Volume 1h <SortArrow field="volume1h" />
+                      Volume 1h
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Volume 1h: Total trading volume in ETH over the last 1 hour. Shows very recent activity.');
+                        }}
+                        title="What is 1h volume?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="volume1h" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('volume6h')}>
-                      Volume 6h <SortArrow field="volume6h" />
+                      Volume 6h
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Volume 6h: Total trading volume in ETH over the last 6 hours. Shows short-term activity.');
+                        }}
+                        title="What is 6h volume?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="volume6h" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('volume24h')}>
-                      Volume 24h <SortArrow field="volume24h" />
+                      Volume 24h
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Volume 24h: Total trading volume in ETH over the last 24 hours.');
+                        }}
+                        title="What is 24h volume?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="volume24h" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('marketCap')}>
-                      MCAP <SortArrow field="marketCap" />
+                      MCAP
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('MCAP: Market capitalization in USD, calculated from token price and total supply.');
+                        }}
+                        title="What is market cap?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="marketCap" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('runnerScore')}>
                       Score
@@ -1044,12 +1323,46 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                       <SortArrow field="runnerScore" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('devBuyAmount')}>
-                      Dev Buy <SortArrow field="devBuyAmount" />
+                      Dev Buy
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Dev Buy: Amount of ETH the deployer spent to buy tokens immediately after deployment. Higher amounts indicate more confidence.');
+                        }}
+                        title="What is dev buy?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="devBuyAmount" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('timestamp')}>
-                      Age <SortArrow field="timestamp" />
+                      Age
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Age: Time since the token was deployed. Shows how new the token is.');
+                        }}
+                        title="What is age?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="timestamp" />
                     </th>
-                    <th>Links</th>
+                    <th>
+                      Links
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Links: Quick access to DexScreener (DS), Defined.fi (DF), and BaseScan (BS) for this token.');
+                        }}
+                        title="What are links?"
+                      >
+                        ?
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1111,14 +1424,20 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                           {formatVolume(deployment.volume24h)}
                         </td>
                         <td className="mcap-cell">
-                          {formatMarketCap(deployment.marketCap)}
+                          {formatMarketCap(deployment.marketCap || 0)}
                         </td>
                         <td className="score-cell">
-                          {deployment.runnerData && (
-                            <span className={`runner-score ${deployment.runnerData.score > 0.5 ? 'high' : deployment.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
-                              {deployment.runnerData.score.toFixed(2)}
-                            </span>
-                          )}
+                          {(() => {
+                            const score = calculateRunnerScore(deployment).score;
+                            if (score === 0 || isNaN(score)) {
+                              return <span className="growth-indicator">-</span>;
+                            }
+                            return (
+                              <span className={`runner-score ${score > 0.5 ? 'high' : score > 0.2 ? 'medium' : 'low'}`}>
+                                {score.toFixed(2)}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="dev-buy-cell">
                           <div className="dev-buy-content">
@@ -1152,10 +1471,11 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         )}
 
-        {/* All Deployments Section - FREE (Not Token Gated) */}
+        {/* All Deployments Section - Free (public) */}
         {sortedDeployments.length > 0 && (
           <div className="database-section">
             <div className="section-header">
@@ -1176,20 +1496,87 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                       Token <SortArrow field="tokenName" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('holderCount')}>
-                      Holders <SortArrow field="holderCount" />
+                      Holders
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Holders: Total number of unique addresses that hold this token.');
+                        }}
+                        title="What are holders?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="holderCount" />
                     </th>
-                    <th>Growth</th>
+                    <th>
+                      Growth
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Growth: Percentage change in holder count since last check. Shows how quickly the token is gaining holders.');
+                        }}
+                        title="What is growth?"
+                      >
+                        ?
+                      </button>
+                    </th>
                     <th className="sortable" onClick={() => handleSort('volume1h')}>
-                      Volume 1h <SortArrow field="volume1h" />
+                      Volume 1h
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Volume 1h: Total trading volume in ETH over the last 1 hour. Shows very recent activity.');
+                        }}
+                        title="What is 1h volume?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="volume1h" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('volume6h')}>
-                      Volume 6h <SortArrow field="volume6h" />
+                      Volume 6h
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Volume 6h: Total trading volume in ETH over the last 6 hours. Shows short-term activity.');
+                        }}
+                        title="What is 6h volume?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="volume6h" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('volume24h')}>
-                      Volume 24h <SortArrow field="volume24h" />
+                      Volume 24h
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Volume 24h: Total trading volume in ETH over the last 24 hours.');
+                        }}
+                        title="What is 24h volume?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="volume24h" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('marketCap')}>
-                      MCAP <SortArrow field="marketCap" />
+                      MCAP
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('MCAP: Market capitalization in USD, calculated from token price and total supply.');
+                        }}
+                        title="What is market cap?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="marketCap" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('runnerScore')}>
                       Score
@@ -1206,12 +1593,46 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                       <SortArrow field="runnerScore" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('devBuyAmount')}>
-                      Dev Buy <SortArrow field="devBuyAmount" />
+                      Dev Buy
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Dev Buy: Amount of ETH the deployer spent to buy tokens immediately after deployment. Higher amounts indicate more confidence.');
+                        }}
+                        title="What is dev buy?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="devBuyAmount" />
                     </th>
                     <th className="sortable" onClick={() => handleSort('timestamp')}>
-                      Age <SortArrow field="timestamp" />
+                      Age
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Age: Time since the token was deployed. Shows how new the token is.');
+                        }}
+                        title="What is age?"
+                      >
+                        ?
+                      </button>
+                      <SortArrow field="timestamp" />
                     </th>
-                    <th>Links</th>
+                    <th>
+                      Links
+                      <button
+                        className="help-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert('Links: Quick access to DexScreener (DS), Defined.fi (DF), and BaseScan (BS) for this token.');
+                        }}
+                        title="What are links?"
+                      >
+                        ?
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1273,14 +1694,20 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                           {formatVolume(deployment.volume24h)}
                         </td>
                         <td className="mcap-cell">
-                          {formatMarketCap(deployment.marketCap)}
+                          {formatMarketCap(deployment.marketCap || 0)}
                         </td>
                         <td className="score-cell">
-                          {deployment.runnerData && (
-                            <span className={`runner-score ${deployment.runnerData.score > 0.5 ? 'high' : deployment.runnerData.score > 0.2 ? 'medium' : 'low'}`}>
-                              {deployment.runnerData.score.toFixed(2)}
-                            </span>
-                          )}
+                          {(() => {
+                            const score = calculateRunnerScore(deployment).score;
+                            if (score === 0 || isNaN(score)) {
+                              return <span className="growth-indicator">-</span>;
+                            }
+                            return (
+                              <span className={`runner-score ${score > 0.5 ? 'high' : score > 0.2 ? 'medium' : 'low'}`}>
+                                {score.toFixed(2)}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="dev-buy-cell">
                           <div className="dev-buy-content">
@@ -1314,6 +1741,7 @@ function TokenFeed({ deployments, hasEnoughTokens = false, hasAccess = false, on
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         )}
       </div>
