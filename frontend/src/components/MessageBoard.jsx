@@ -1,279 +1,284 @@
-import { useState, useEffect } from 'react';
-import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
-import { parseEther, formatEther } from 'viem';
-import { supabase } from '../config/supabase.js';
-import './MessageBoard.css';
-
-const DEV_WALLET = '0x8DFBdEEC8c5d4970BB5F481C6ec7f73fa1C65be5'; // ionoi.eth
-const MIN_PAYMENT_USD = 1.0; // $1 minimum
-const ETH_PRICE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-let ethPriceCache = { price: null, timestamp: 0 };
-
-async function getETHPrice() {
-  const now = Date.now();
-  if (ethPriceCache.price && (now - ethPriceCache.timestamp) < ETH_PRICE_CACHE_DURATION) {
-    return ethPriceCache.price;
-  }
-
-  try {
-    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
-    const data = await response.json();
-    const price = data.ethereum?.usd || 3000; // Fallback to $3000 if API fails
-    ethPriceCache = { price, timestamp: now };
-    return price;
-  } catch (error) {
-    console.error('Error fetching ETH price:', error);
-    return ethPriceCache.price || 3000; // Use cached price or fallback
-  }
+/* === Message Board – Premium Glass Panel Upgrade === */
+.message-board {
+  background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.96), rgba(0, 0, 0, 0.98));
+  border: 1px solid rgba(22, 163, 74, 0.7);
+  border-radius: 16px;
+  padding: 1.5rem;
+  color: #e5e7eb;
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.92),
+    0 0 18px rgba(22, 163, 74, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-function MessageBoard() {
-  const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [ethPrice, setEthPrice] = useState(null);
-  const [ethAmount, setEthAmount] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const { address, isConnected } = useAccount();
-
-  const { data: hash, sendTransaction, isPending, error: txError } = useSendTransaction();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash,
-  });
-
-  useEffect(() => {
-    fetchETHPrice();
-    fetchMessages();
-  }, []);
-
-  useEffect(() => {
-    if (isConfirmed && hash) {
-      submitMessage(hash);
-    }
-  }, [isConfirmed, hash]);
-
-  async function fetchETHPrice() {
-    const price = await getETHPrice();
-    setEthPrice(price);
-    const amount = MIN_PAYMENT_USD / price;
-    setEthAmount(amount);
-  }
-
-  async function fetchMessages() {
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('status', 'verified')
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-      setMessages(data || []);
-    } catch (err) {
-      console.error('Error fetching messages:', err);
-    }
-  }
-
-  async function submitMessage(txHash) {
-    if (!message.trim() || !txHash) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Get transaction details to verify amount using public RPC
-      const rpcUrl = import.meta.env.VITE_ALCHEMY_API_KEY
-        ? `https://base-mainnet.g.alchemy.com/v2/${import.meta.env.VITE_ALCHEMY_API_KEY}`
-        : 'https://mainnet.base.org';
-
-      const response = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'eth_getTransactionByHash',
-          params: [txHash],
-        }),
-      });
-
-      const txData = await response.json();
-      if (!txData.result) {
-        throw new Error('Transaction not found. Please wait a moment and try again.');
-      }
-
-      const txValue = BigInt(txData.result.value);
-      const txValueEth = parseFloat(formatEther(txValue));
-      const txValueUsd = txValueEth * (ethPrice || 3000);
-
-      if (txValueUsd < MIN_PAYMENT_USD) {
-        throw new Error(`Payment too low. Minimum $${MIN_PAYMENT_USD} required. You sent $${txValueUsd.toFixed(2)}.`);
-      }
-
-      // Verify transaction is to dev wallet
-      if (txData.result.to?.toLowerCase() !== DEV_WALLET.toLowerCase()) {
-        throw new Error('Transaction must be sent to the dev wallet');
-      }
-
-      // Store message in Supabase
-      const { data, error: insertError } = await supabase
-        .from('messages')
-        .insert({
-          sender_address: address,
-          message: message.trim(),
-          payment_tx_hash: txHash,
-          payment_amount_eth: txValueEth,
-          payment_amount_usd: txValueUsd,
-          status: 'pending', // Will be verified by backend or manually
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      // Refresh messages
-      await fetchMessages();
-      setMessage('');
-      setShowForm(false);
-      alert('Message sent! It will appear after verification.');
-    } catch (err) {
-      console.error('Error submitting message:', err);
-      setError(err.message || 'Failed to submit message');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleSendPayment() {
-    if (!isConnected) {
-      alert('Please connect your wallet first');
-      return;
-    }
-
-    if (!message.trim()) {
-      setError('Please enter a message');
-      return;
-    }
-
-    if (!ethAmount) {
-      await fetchETHPrice();
-      return;
-    }
-
-    setError(null);
-
-    try {
-      await sendTransaction({
-        to: DEV_WALLET,
-        value: parseEther(ethAmount.toFixed(6)),
-      });
-    } catch (err) {
-      console.error('Error sending transaction:', err);
-      setError(err.message || 'Failed to send payment');
-    }
-  }
-
-  const truncateAddress = (addr) => {
-    if (!addr) return 'Unknown';
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
-
-  return (
-    <div className="message-board">
-      <div className="message-board-header">
-        <h3>💬 Message Board</h3>
-        <p className="message-board-subtitle">Send a message to the dev ($1 minimum)</p>
-      </div>
-
-      {!isConnected && (
-        <div className="message-board-connect">
-          <p>Connect your wallet to send a message</p>
-        </div>
-      )}
-
-      {isConnected && !showForm && (
-        <button
-          className="message-board-button"
-          onClick={() => setShowForm(true)}
-        >
-          ✍️ Write a Message
-        </button>
-      )}
-
-      {isConnected && showForm && (
-        <div className="message-board-form">
-          <textarea
-            className="message-board-textarea"
-            placeholder="Type your message here..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            maxLength={500}
-            rows={4}
-          />
-          <div className="message-board-payment-info">
-            <p>
-              Cost: <strong>${MIN_PAYMENT_USD.toFixed(2)}</strong> (
-              {ethAmount ? `${ethAmount.toFixed(6)} ETH` : 'Loading...'})
-            </p>
-            {ethPrice && <p className="eth-price">ETH Price: ${ethPrice.toFixed(2)}</p>}
-          </div>
-
-          {error && <div className="message-board-error">{error}</div>}
-          {txError && <div className="message-board-error">{txError.message}</div>}
-
-          <div className="message-board-actions">
-            <button
-              className="message-board-button secondary"
-              onClick={() => {
-                setShowForm(false);
-                setMessage('');
-                setError(null);
-              }}
-              disabled={isPending || isConfirming}
-            >
-              Cancel
-            </button>
-            <button
-              className="message-board-button primary"
-              onClick={handleSendPayment}
-              disabled={isPending || isConfirming || !message.trim() || !ethAmount}
-            >
-              {isPending
-                ? 'Confirm in Wallet...'
-                : isConfirming
-                ? 'Confirming...'
-                : `Send $${MIN_PAYMENT_USD.toFixed(2)} & Message`}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="message-board-list">
-        <h4>Recent Messages ({messages.length})</h4>
-        {messages.length === 0 ? (
-          <p className="no-messages">No messages yet. Be the first!</p>
-        ) : (
-          <div className="messages">
-            {messages.map((msg) => (
-              <div key={msg.id} className="message-item">
-                <div className="message-header">
-                  <span className="message-sender">{truncateAddress(msg.sender_address)}</span>
-                  <span className="message-time">
-                    {new Date(msg.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-                <div className="message-content">{msg.message}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+/* === Header / Subtitle === */
+.message-board-header {
+  border-bottom: 1px solid rgba(22, 163, 74, 0.4);
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
-export default MessageBoard;
+.message-board-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #bbf7d0;
+  text-shadow:
+    0 0 10px rgba(22, 163, 74, 0.5),
+    0 0 22px rgba(22, 163, 74, 0.3);
+}
 
+.message-board-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+/* === Connect Notice === */
+.message-board-connect {
+  background: rgba(15, 23, 42, 0.9);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  border: 1px dashed rgba(148, 163, 184, 0.7);
+}
+
+.message-board-connect p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #e5e7eb;
+}
+
+/* === Buttons (primary / secondary) === */
+.message-board-button {
+  border-radius: 999px;
+  padding: 0.6rem 1.3rem;
+  border: 1px solid rgba(22, 163, 74, 0.85);
+  background: radial-gradient(circle at top left, rgba(22, 163, 74, 0.16), rgba(0, 0, 0, 0.96));
+  color: #bbf7d0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  box-shadow: 0 10px 22px rgba(22, 163, 74, 0.35);
+  transition: all 0.18s ease;
+}
+
+.message-board-button:hover {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #000000;
+  transform: translateY(-1px) scale(1.01);
+}
+
+.message-board-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* primary / secondary variants */
+.message-board-button.primary {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #000000;
+}
+
+.message-board-button.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+}
+
+.message-board-button.secondary {
+  background: rgba(15, 23, 42, 0.96);
+  color: #e5e7eb;
+  border-color: rgba(148, 163, 184, 0.9);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.9);
+}
+
+.message-board-button.secondary:hover:not(:disabled) {
+  background: rgba(31, 41, 55, 0.95);
+}
+
+/* === Form Wrapper === */
+.message-board-form {
+  margin-top: 0.5rem;
+  padding: 1rem;
+  border-radius: 14px;
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.98), rgba(0, 0, 0, 0.98));
+  border: 1px solid rgba(22, 163, 74, 0.65);
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.92),
+    0 0 16px rgba(22, 163, 74, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* === Textarea === */
+.message-board-textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(22, 163, 74, 0.8);
+  background: #020617;
+  color: #e5e7eb;
+  padding: 0.75rem 0.9rem;
+  font-size: 0.9rem;
+  resize: vertical;
+  min-height: 96px;
+  box-shadow: 0 0 18px rgba(22, 163, 74, 0.3);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.message-board-textarea::placeholder {
+  color: #6b7280;
+}
+
+.message-board-textarea:focus {
+  outline: none;
+  border-color: #4ade80;
+  background: #020617;
+  box-shadow: 0 0 22px rgba(22, 163, 74, 0.6);
+}
+
+/* === Payment Info === */
+.message-board-payment-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: #d1d5db;
+}
+
+.message-board-payment-info strong {
+  color: #bbf7d0;
+}
+
+.eth-price {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+/* === Error Messages === */
+.message-board-error {
+  margin-top: 0.25rem;
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: #fee2e2;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.7);
+}
+
+/* === Form Actions Row === */
+.message-board-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* === Messages List Wrapper === */
+.message-board-list {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(31, 41, 55, 0.9);
+}
+
+.message-board-list h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: #bbf7d0;
+}
+
+/* === Empty State === */
+.no-messages {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+/* === Messages Scroll Area === */
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+/* === Individual Message Card === */
+.message-item {
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(31, 41, 55, 0.95);
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.message-item:hover {
+  border-color: rgba(22, 163, 74, 0.7);
+  background: rgba(15, 23, 42, 1);
+  transform: translateY(-1px);
+}
+
+/* Header (address + date) */
+.message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.message-sender {
+  font-weight: 600;
+  color: #bbf7d0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.message-time {
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
+/* Body text */
+.message-content {
+  font-size: 0.86rem;
+  line-height: 1.4;
+  color: #e5e7eb;
+  word-wrap: break-word;
+}
+
+/* === Mobile tweaks === */
+@media (max-width: 640px) {
+  .message-board {
+    padding: 1.1rem;
+    border-radius: 14px;
+  }
+
+  .message-board-actions {
+    justify-content: stretch;
+  }
+
+  .message-board-button {
+    width: 100%;
+  }
+
+  .message-board-payment-info {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .messages {
+    max-height: 220px;
+  }
+}
