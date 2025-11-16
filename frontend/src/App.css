@@ -1,11 +1,14 @@
+/* === Premium upgrade: app shell background === */
 .App {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: radial-gradient(circle at top, #020617 0, #000000 55%, #000000 100%);
 }
 
+/* === Premium upgrade: header surface (card-like, still minimal) === */
 .App-header {
-  background: #000000;
+  background: transparent;
   padding: 2rem;
   border-bottom: 2px solid #16a34a;
 }
@@ -18,6 +21,14 @@
   align-items: flex-start;
   gap: 2rem;
   flex-wrap: wrap;
+  padding: 1.5rem 1.75rem;
+  border-radius: 16px;
+  background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.9), rgba(0, 0, 0, 0.98));
+  border: 1px solid rgba(22, 163, 74, 0.35);
+  box-shadow:
+    0 18px 45px rgba(0, 0, 0, 0.85),
+    0 0 32px rgba(22, 163, 74, 0.25);
+  backdrop-filter: blur(14px);
 }
 
 .header-main {
@@ -34,45 +45,62 @@
   flex-wrap: wrap;
 }
 
+/* === Premium upgrade: logo treatment === */
 .fey-logo {
   height: 60px;
   width: auto;
   margin-right: 1rem;
+  border-radius: 999px;
+  box-shadow: 0 0 18px rgba(22, 163, 74, 0.35);
+  border: 1px solid rgba(22, 163, 74, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.fey-logo:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 0 26px rgba(22, 163, 74, 0.55);
+  border-color: rgba(74, 222, 128, 0.75);
 }
 
 .App-header h1 {
   font-size: 2.5rem;
   margin-bottom: 0.5rem;
-  color: #16a34a;
+  color: #ecfdf5;
   font-weight: 700;
-  text-shadow: 0 0 8px rgba(22, 163, 74, 0.3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow:
+    0 0 14px rgba(22, 163, 74, 0.6),
+    0 0 34px rgba(22, 163, 74, 0.35);
 }
 
+/* === Premium upgrade: status pill refinement === */
 .status-indicator {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  border-radius: 20px;
+  border-radius: 999px;
   font-size: 0.875rem;
   font-weight: 600;
-  background: #000000;
-  border: 1px solid #16a34a;
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.95), rgba(0, 0, 0, 0.98));
+  border: 1px solid rgba(22, 163, 74, 0.7);
+  box-shadow: 0 0 18px rgba(22, 163, 74, 0.35);
 }
 
 .status-indicator.online {
   border-color: #16a34a;
-  color: #16a34a;
+  color: #bbf7d0;
 }
 
 .status-indicator.offline {
   border-color: #ef4444;
-  color: #ef4444;
+  color: #fecaca;
 }
 
 .status-indicator.checking {
   border-color: #fbbf24;
-  color: #fbbf24;
+  color: #fef3c7;
 }
 
 .status-dot {
@@ -84,7 +112,7 @@
 }
 
 .status-indicator.online .status-dot {
-  background: #16a34a;
+  background: #4ade80;
 }
 
 .status-indicator.offline .status-dot {
@@ -107,10 +135,10 @@
 }
 
 .subtitle {
-  color: #16a34a;
+  color: #a7f3d0;
   font-size: 1rem;
   margin-bottom: 1rem;
-  opacity: 0.8;
+  opacity: 0.9;
 }
 
 /* Buy Section */
@@ -133,67 +161,77 @@
   max-width: 600px;
 }
 
+/* === Premium upgrade: buttons (pills, soft glow) === */
 .buy-button {
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
+  padding: 0.75rem 1.6rem;
+  border-radius: 999px;
   font-size: 0.875rem;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-  transition: all 0.2s;
-  border: 2px solid #16a34a;
+  transition: all 0.18s ease-out;
+  border: 1.5px solid #16a34a;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 44px;
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.2);
+  box-shadow:
+    0 4px 16px rgba(22, 163, 74, 0.25),
+    0 0 14px rgba(22, 163, 74, 0.35);
+  background: radial-gradient(circle at top left, rgba(22, 163, 74, 0.22), rgba(0, 0, 0, 0.9));
 }
 
 .buy-button.primary {
-  background: #16a34a;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #000000;
-  border-color: #16a34a;
+  border-color: #22c55e;
   flex: 1;
   min-width: 140px;
 }
 
 .buy-button.primary:hover {
-  background: #22c55e;
-  border-color: #22c55e;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  border-color: #4ade80;
+  transform: translateY(-1px) scale(1.01);
+  box-shadow:
+    0 8px 24px rgba(22, 163, 74, 0.5),
+    0 0 22px rgba(22, 163, 74, 0.65);
 }
 
 .buy-button.secondary {
-  background: #000000;
-  color: #16a34a;
-  border-color: #16a34a;
+  background: radial-gradient(circle at top left, rgba(22, 163, 74, 0.1), rgba(0, 0, 0, 0.95));
+  color: #bbf7d0;
+  border-color: rgba(22, 163, 74, 0.85);
   flex: 1;
   min-width: 140px;
 }
 
 .buy-button.secondary:hover {
-  background: #16a34a;
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.6), #16a34a);
   color: #000000;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+  transform: translateY(-1px) scale(1.01);
+  box-shadow:
+    0 8px 24px rgba(22, 163, 74, 0.5),
+    0 0 22px rgba(22, 163, 74, 0.65);
 }
 
 .buy-button.copy-button {
-  background: #000000;
-  color: #16a34a;
-  border-color: #16a34a;
+  background: radial-gradient(circle at top left, rgba(22, 163, 74, 0.08), rgba(0, 0, 0, 0.95));
+  color: #a7f3d0;
+  border-color: rgba(22, 163, 74, 0.7);
   font-family: inherit;
   flex: 0 0 auto;
   min-width: 120px;
 }
 
 .buy-button.copy-button:hover {
-  background: #16a34a;
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.5), #16a34a);
   color: #000000;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+  transform: translateY(-1px) scale(1.01);
+  box-shadow:
+    0 8px 24px rgba(22, 163, 74, 0.5),
+    0 0 22px rgba(22, 163, 74, 0.65);
 }
 
 .token-address-display {
@@ -202,7 +240,7 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   justify-content: center;
-  color: #16a34a;
+  color: #a7f3d0;
   font-size: 0.875rem;
 }
 
@@ -212,31 +250,35 @@
 }
 
 .token-address-code {
-  background: #000000;
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.98), rgba(0, 0, 0, 0.98));
   padding: 0.5rem 1rem;
-  border-radius: 6px;
-  color: #16a34a;
-  border: 1px solid #16a34a;
+  border-radius: 999px;
+  color: #bbf7d0;
+  border: 1px solid rgba(22, 163, 74, 0.9);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease-out;
   font-size: 0.875rem;
   font-weight: 600;
+  box-shadow: 0 0 14px rgba(22, 163, 74, 0.4);
 }
 
 .token-address-code:hover {
-  background: #16a34a;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #000000;
   transform: scale(1.05);
 }
 
 /* Donation Section */
+/* === Premium upgrade: donation card refinement === */
 .donation-section {
-  background: #000000;
-  border: 2px solid #16a34a;
-  border-radius: 12px;
+  background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.96), rgba(0, 0, 0, 0.98));
+  border: 1.5px solid rgba(22, 163, 74, 0.65);
+  border-radius: 14px;
   padding: 1rem 1.5rem;
   min-width: 280px;
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.9),
+    0 0 16px rgba(22, 163, 74, 0.3);
 }
 
 .donation-header {
@@ -250,13 +292,15 @@
 .donation-header.clickable {
   cursor: pointer;
   padding: 0.5rem;
-  border-radius: 6px;
-  transition: background 0.2s;
+  border-radius: 8px;
+  transition: background 0.2s ease-out, box-shadow 0.2s ease-out, transform 0.15s ease-out;
   user-select: none;
 }
 
 .donation-header.clickable:hover {
   background: rgba(22, 163, 74, 0.1);
+  box-shadow: 0 0 16px rgba(22, 163, 74, 0.4);
+  transform: translateY(-1px);
 }
 
 .donation-preview {
@@ -281,10 +325,12 @@
   from {
     opacity: 0;
     max-height: 0;
+    transform: translateY(-4px);
   }
   to {
     opacity: 1;
     max-height: 2000px;
+    transform: translateY(0);
   }
 }
 
@@ -293,7 +339,7 @@
 }
 
 .donation-title {
-  color: #16a34a;
+  color: #a7f3d0;
   font-weight: 600;
   font-size: 0.875rem;
   text-transform: uppercase;
@@ -315,25 +361,26 @@
 }
 
 .wallet-label {
-  color: #16a34a;
+  color: #a7f3d0;
   font-size: 0.75rem;
   opacity: 0.8;
 }
 
 .wallet-address {
-  background: #000000;
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.98), rgba(0, 0, 0, 0.98));
   padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  color: #16a34a;
+  border-radius: 999px;
+  color: #bbf7d0;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.85);
+  box-shadow: 0 0 12px rgba(22, 163, 74, 0.4);
 }
 
 .wallet-address:hover {
-  background: #16a34a;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #000000;
   transform: scale(1.05);
 }
@@ -341,9 +388,9 @@
 .copy-wallet-btn {
   background: transparent;
   border: 1px solid #16a34a;
-  color: #16a34a;
+  color: #a7f3d0;
   padding: 0.5rem;
-  border-radius: 6px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 1rem;
   transition: all 0.2s;
@@ -371,20 +418,20 @@
   align-items: center;
   gap: 0.5rem;
   background: transparent;
-  border: 1px solid #16a34a;
-  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.75);
+  color: #a7f3d0;
   text-decoration: none;
   font-size: 0.75rem;
   padding: 0.5rem 1rem;
-  border-radius: 6px;
+  border-radius: 999px;
   transition: all 0.2s;
   cursor: pointer;
 }
 
 .donation-link:hover {
-  background: #16a34a;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #000000;
-  transform: scale(1.05);
+  transform: translateY(-1px);
 }
 
 .donation-link.about-link {
@@ -393,8 +440,8 @@
 }
 
 .donation-link.about-link:hover {
-  background: rgba(22, 163, 74, 0.1);
-  color: #16a34a;
+  background: rgba(22, 163, 74, 0.12);
+  color: #bbf7d0;
 }
 
 .link-icon {
@@ -402,29 +449,33 @@
 }
 
 /* Modal Styles */
+/* === Premium upgrade: modal glass effect === */
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.9), rgba(0, 0, 0, 0.96));
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 1rem;
+  backdrop-filter: blur(10px);
 }
 
 .modal-content {
-  background: #000000;
-  border: 2px solid #16a34a;
-  border-radius: 12px;
+  background: radial-gradient(circle at top left, rgba(0, 0, 0, 0.96), rgba(15, 23, 42, 0.98));
+  border: 1.5px solid rgba(22, 163, 74, 0.8);
+  border-radius: 16px;
   max-width: 600px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(22, 163, 74, 0.3);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.9),
+    0 0 28px rgba(22, 163, 74, 0.55);
 }
 
 .modal-header {
@@ -432,11 +483,11 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid #16a34a;
+  border-bottom: 1px solid rgba(22, 163, 74, 0.6);
 }
 
 .modal-header h2 {
-  color: #16a34a;
+  color: #bbf7d0;
   margin: 0;
   font-size: 1.5rem;
 }
@@ -444,11 +495,11 @@
 .modal-close {
   background: transparent;
   border: 1px solid #16a34a;
-  color: #16a34a;
+  color: #a7f3d0;
   font-size: 1.5rem;
   width: 2rem;
   height: 2rem;
-  border-radius: 50%;
+  border-radius: 999px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -458,13 +509,13 @@
 }
 
 .modal-close:hover {
-  background: #16a34a;
+  background: #22c55e;
   color: #000000;
 }
 
 .modal-body {
   padding: 1.5rem;
-  color: #ffffff;
+  color: #e5e7eb;
 }
 
 .modal-body p {
@@ -473,7 +524,7 @@
 }
 
 .modal-body h3 {
-  color: #16a34a;
+  color: #a7f3d0;
   margin-top: 1.5rem;
   margin-bottom: 0.75rem;
   font-size: 1.125rem;
@@ -500,16 +551,16 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #16a34a;
+  color: #a7f3d0;
   text-decoration: none;
   padding: 0.75rem;
-  border: 1px solid #16a34a;
-  border-radius: 6px;
+  border: 1px solid rgba(22, 163, 74, 0.8);
+  border-radius: 10px;
   transition: all 0.2s;
 }
 
 .modal-link:hover {
-  background: #16a34a;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #000000;
   transform: translateX(4px);
 }
@@ -673,13 +724,19 @@
   /* Desktop styles are already defined above */
 }
 
+/* === Premium upgrade: main content surface === */
 .App-main {
   flex: 1;
   padding: 2rem;
   max-width: 1200px;
   width: 100%;
-  margin: 0 auto;
-  background: #000000;
+  margin: 1.5rem auto 0;
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.9), rgba(0, 0, 0, 0.98));
+  border-radius: 18px;
+  border: 1px solid rgba(22, 163, 74, 0.35);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.9),
+    0 0 20px rgba(22, 163, 74, 0.25);
 }
 
 .loading, .error {
@@ -689,11 +746,11 @@
 }
 
 .loading {
-  color: #16a34a;
+  color: #bbf7d0;
 }
 
 .error {
-  color: #ef4444;
+  color: #fecaca;
   background: #000000;
   border: 2px solid #ef4444;
   border-radius: 8px;
@@ -701,11 +758,12 @@
 }
 
 /* Footer */
+/* === Premium upgrade: footer separation === */
 .App-footer {
-  background: #000000;
-  border-top: 2px solid #16a34a;
+  background: transparent;
+  border-top: 1px solid rgba(22, 163, 74, 0.4);
   padding: 1.5rem 2rem;
-  margin-top: auto;
+  margin-top: 1.5rem;
 }
 
 .footer-content {
@@ -715,19 +773,19 @@
 }
 
 .footer-text {
-  color: #16a34a;
+  color: #9ca3af;
   font-size: 0.875rem;
-  opacity: 0.6;
+  opacity: 0.8;
   margin: 0;
 }
 
 .footer-text code {
-  background: #000000;
+  background: rgba(15, 23, 42, 0.95);
   padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  color: #16a34a;
-  border: 1px solid #16a34a;
-  opacity: 0.8;
+  border-radius: 999px;
+  color: #bbf7d0;
+  border: 1px solid rgba(22, 163, 74, 0.8);
+  opacity: 0.95;
   font-size: 0.8rem;
 }
 
@@ -736,25 +794,31 @@
   margin-left: auto;
 }
 
+/* === Premium upgrade: wallet connect CTA === */
 .wallet-connect-btn {
-  background: #000000;
-  border: 2px solid #16a34a;
-  color: #16a34a;
+  background: radial-gradient(circle at top left, rgba(22, 163, 74, 0.18), rgba(0, 0, 0, 0.96));
+  border: 1.5px solid rgba(22, 163, 74, 0.9);
+  color: #bbf7d0;
   padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  border-radius: 999px;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
+  box-shadow:
+    0 4px 16px rgba(22, 163, 74, 0.3),
+    0 0 15px rgba(22, 163, 74, 0.45);
 }
 
 .wallet-connect-btn:hover {
-  background: #16a34a;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #000000;
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+  transform: scale(1.05) translateY(-1px);
+  box-shadow:
+    0 10px 30px rgba(22, 163, 74, 0.65),
+    0 0 26px rgba(22, 163, 74, 0.85);
 }
 
 .wallet-info-container {
@@ -770,20 +834,21 @@
 }
 
 .wallet-address-text {
-  color: #16a34a;
+  color: #bbf7d0;
   font-size: 0.875rem;
   font-weight: 600;
-  background: #000000;
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.98), rgba(0, 0, 0, 0.98));
   padding: 0.5rem 1rem;
-  border-radius: 6px;
-  border: 1px solid #16a34a;
+  border-radius: 999px;
+  border: 1px solid rgba(22, 163, 74, 0.9);
+  box-shadow: 0 0 14px rgba(22, 163, 74, 0.45);
 }
 
 .token-badge {
-  background: #16a34a;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #000000;
   padding: 0.25rem 0.75rem;
-  border-radius: 12px;
+  border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -793,9 +858,9 @@
 .wallet-disconnect-btn {
   background: transparent;
   border: 1px solid #ef4444;
-  color: #ef4444;
+  color: #fecaca;
   padding: 0.5rem 1rem;
-  border-radius: 6px;
+  border-radius: 999px;
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -805,4 +870,3 @@
   background: #ef4444;
   color: #000000;
 }
-
